@@ -243,6 +243,7 @@ export function buildAssignment(task, due, email, jmeno) {
     hotovo: null,
     poznamka: '',
     kontrolni: (task.kontrolni || []).map((t) => ({ t, done: false })),
+    odkazy: (task.odkazy || []).map((l) => ({ ...l })),
     outlook: task.outlook !== false,
     outlookId: '',
   };
@@ -292,6 +293,8 @@ export function reconcile(want, existing, onlyTaskIds = null) {
     // kroky ze zadání: nové se doplní, odebrané zmizí, odškrtnuté zůstanou odškrtnuté, vlastní kroky člověka zůstanou
     const merged = mergeChecklist(a.kontrolni.map((k) => k.t), ex.kontrolni || []);
     if (JSON.stringify(merged) !== JSON.stringify(ex.kontrolni || [])) patch.kontrolni = merged;
+    const links = mergeLinks(a.odkazy, ex.odkazy || []);
+    if (JSON.stringify(links) !== JSON.stringify(ex.odkazy || [])) patch.odkazy = links;
     if (Object.keys(patch).length) update.push({ id: ex.id, patch });
   }
   if (onlyTaskIds) {
@@ -303,15 +306,35 @@ export function reconcile(want, existing, onlyTaskIds = null) {
   return { create, update, remove };
 }
 
-/** Kroky ze zadání + stav odškrtnutí z přiřazení + vlastní kroky, které si člověk přidal sám. */
+/**
+ * Kroky ze zadání + stav odškrtnutí z přiřazení + vlastní kroky, které si člověk přidal sám.
+ * Pořadí, které si člověk nastavil, zůstává; nové kroky ze zadání se přidají na konec.
+ */
 export function mergeChecklist(template, current) {
   const used = new Set();
-  const out = template.map((t) => {
-    const i = current.findIndex((c, j) => !used.has(j) && !c.own && c.t === t);
-    if (i >= 0) used.add(i);
-    return { t, done: i >= 0 ? !!current[i].done : false };
-  });
-  return [...out, ...current.filter((c) => c.own)];
+  const out = [];
+  for (const c of current) {
+    if (c.own) { out.push(c); continue; }
+    const i = template.findIndex((t, j) => !used.has(j) && t === c.t);
+    if (i >= 0) { used.add(i); out.push({ t: c.t, done: !!c.done }); }
+  }
+  template.forEach((t, j) => { if (!used.has(j)) out.push({ t, done: false }); });
+  return out;
+}
+
+export const linkKey = (l) => l.u || `soubor:${l.n}`;
+/** Odkazy ze zadání + vlastní odkazy člověka; údaje (název, sdílení) bere ze zadání. */
+export function mergeLinks(template, current) {
+  const tk = new Map(template.map((t) => [linkKey(t), t]));
+  const out = [];
+  const seen = new Set();
+  for (const c of current) {
+    if (c.own) { out.push(c); continue; }
+    const t = tk.get(linkKey(c));
+    if (t && !seen.has(linkKey(t))) { out.push({ ...t }); seen.add(linkKey(t)); }
+  }
+  for (const t of template) if (!seen.has(linkKey(t))) out.push({ ...t });
+  return out;
 }
 
 /* ---------- navržený termín podle rychlosti ---------- */

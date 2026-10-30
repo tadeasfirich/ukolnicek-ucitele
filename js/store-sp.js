@@ -4,18 +4,18 @@ import { ROLE_LABELS, reminderMinutes, PRIORITY, addDays, startOfDay } from './c
 
 const MSAL_URL = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.27.0/+esm';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-export const SCOPES = ['User.Read', 'Sites.ReadWrite.All', 'Calendars.ReadWrite', 'GroupMember.Read.All'];
+export const SCOPES = ['User.Read', 'Sites.ReadWrite.All', 'Calendars.ReadWrite', 'GroupMember.Read.All', 'Files.ReadWrite.All'];
 const PREFER = { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' };
 
 // Sloupce seznamů. [název, typ, indexovat]
 export const SCHEMA = {
   Ukoly: [['Popis', 'note'], ['Priorita', 'text'], ['Typ', 'text', true], ['Cile', 'note'], ['Termin', 'dateTime'], ['Cas', 'text'],
     ['ZobrazitDni', 'number'], ['Opakovani', 'text'], ['Stitky', 'text'], ['Plan', 'note'], ['Zadal', 'text', true], ['ZadalJmeno', 'text'],
-    ['Kontrolni', 'note'], ['Outlook', 'boolean'], ['Aktivni', 'boolean'], ['Zdroj', 'text'], ['Vytvoreno', 'dateTime']],
+    ['Kontrolni', 'note'], ['Odkazy', 'note'], ['Outlook', 'boolean'], ['Aktivni', 'boolean'], ['Zdroj', 'text'], ['Vytvoreno', 'dateTime']],
   Prirazeni: [['UkolId', 'text', true], ['Vyskyt', 'text'], ['Klic', 'text', true], ['Osoba', 'text', true], ['OsobaJmeno', 'text'],
     ['Stav', 'number', true], ['Popis', 'note'], ['Priorita', 'text'], ['Termin', 'dateTime', true], ['Cas', 'text'], ['ZobrazitOd', 'dateTime'],
     ['Stitky', 'text'], ['Zadal', 'text', true], ['ZadalJmeno', 'text'], ['Typ', 'text', true], ['Hotovo', 'dateTime'], ['Poznamka', 'note'],
-    ['Kontrolni', 'note'], ['Outlook', 'boolean'], ['OutlookId', 'text']],
+    ['Kontrolni', 'note'], ['Odkazy', 'note'], ['Outlook', 'boolean'], ['OutlookId', 'text']],
   Lide: [['Email', 'text', true], ['RoleSkupiny', 'text'], ['RoleNavic', 'text'], ['Tridnictvi', 'text'], ['Zastupce', 'text'],
     ['Aktivni', 'boolean'], ['Videno', 'dateTime']],
   Akce: [['Od', 'dateTime'], ['Do', 'dateTime'], ['Cas', 'text'], ['TypAkce', 'text'], ['Zdroj', 'text']],
@@ -41,13 +41,13 @@ const fromTask = (it) => { const f = it.fields; return {
   id: it.id, nazev: f.Title || '', popis: f.Popis || '', priorita: f.Priorita || 'zajic', typ: f.Typ || 'osobni', cile: j(f.Cile, {}),
   termin: f.Termin ? toLocalYmd(f.Termin) : '', cas: f.Cas || '', zobrazitDni: f.ZobrazitDni ?? 7, opakovani: f.Opakovani || '',
   stitky: (f.Stitky || '').split('|').filter(Boolean), plan: f.Plan || '', zadal: (f.Zadal || '').toLowerCase(), zadalJmeno: f.ZadalJmeno || '',
-  kontrolni: j(f.Kontrolni, []), outlook: f.Outlook !== false, aktivni: f.Aktivni !== false, zdroj: f.Zdroj || '', vytvoreno: f.Vytvoreno || it.createdDateTime,
+  kontrolni: j(f.Kontrolni, []), odkazy: j(f.Odkazy, []), outlook: f.Outlook !== false, aktivni: f.Aktivni !== false, zdroj: f.Zdroj || '', vytvoreno: f.Vytvoreno || it.createdDateTime,
 }; };
 const toTask = (t) => ({
   Title: t.nazev, Popis: t.popis || '', Priorita: t.priorita, Typ: t.typ, Cile: JSON.stringify(t.cile || {}),
   Termin: iso(new Date(`${t.termin}T12:00:00`)), Cas: t.cas || '', ZobrazitDni: +t.zobrazitDni || 0, Opakovani: t.opakovani || '',
   Stitky: (t.stitky || []).join('|'), Plan: t.plan || '', Zadal: t.zadal, ZadalJmeno: t.zadalJmeno || '',
-  Kontrolni: JSON.stringify(t.kontrolni || []), Outlook: t.outlook !== false, Aktivni: t.aktivni !== false, Zdroj: t.zdroj || '',
+  Kontrolni: JSON.stringify(t.kontrolni || []), Odkazy: JSON.stringify(t.odkazy || []), Outlook: t.outlook !== false, Aktivni: t.aktivni !== false, Zdroj: t.zdroj || '',
   ...(t.vytvoreno ? { Vytvoreno: iso(t.vytvoreno) } : {}),
 });
 function toLocalYmd(isoStr) { const d = new Date(isoStr); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
@@ -56,17 +56,17 @@ const fromAsg = (it) => { const f = it.fields; return {
   id: it.id, ukolId: f.UkolId, vyskyt: f.Vyskyt, klic: f.Klic, osoba: (f.Osoba || '').toLowerCase(), osobaJmeno: f.OsobaJmeno || '',
   nazev: f.Title || '', popis: f.Popis || '', priorita: f.Priorita || 'zajic', termin: f.Termin, cas: f.Cas || '', zobrazitOd: f.ZobrazitOd,
   stitky: (f.Stitky || '').split('|').filter(Boolean), zadal: (f.Zadal || '').toLowerCase(), zadalJmeno: f.ZadalJmeno || '', typ: f.Typ || '',
-  stav: f.Stav ?? 0, hotovo: f.Hotovo || null, poznamka: f.Poznamka || '', kontrolni: j(f.Kontrolni, []), outlook: f.Outlook !== false, outlookId: f.OutlookId || '',
+  stav: f.Stav ?? 0, hotovo: f.Hotovo || null, poznamka: f.Poznamka || '', kontrolni: j(f.Kontrolni, []), odkazy: j(f.Odkazy, []), outlook: f.Outlook !== false, outlookId: f.OutlookId || '',
 }; };
 const ASG_MAP = { nazev: 'Title', ukolId: 'UkolId', vyskyt: 'Vyskyt', klic: 'Klic', osoba: 'Osoba', osobaJmeno: 'OsobaJmeno', popis: 'Popis',
   priorita: 'Priorita', termin: 'Termin', cas: 'Cas', zobrazitOd: 'ZobrazitOd', stitky: 'Stitky', zadal: 'Zadal', zadalJmeno: 'ZadalJmeno',
-  typ: 'Typ', stav: 'Stav', hotovo: 'Hotovo', poznamka: 'Poznamka', kontrolni: 'Kontrolni', outlook: 'Outlook', outlookId: 'OutlookId' };
+  typ: 'Typ', stav: 'Stav', hotovo: 'Hotovo', poznamka: 'Poznamka', kontrolni: 'Kontrolni', odkazy: 'Odkazy', outlook: 'Outlook', outlookId: 'OutlookId' };
 function toAsg(patch) {
   const f = {};
   for (const [k, v] of Object.entries(patch)) {
     const col = ASG_MAP[k]; if (!col) continue;
     if (k === 'stitky') f[col] = (v || []).join('|');
-    else if (k === 'kontrolni') f[col] = JSON.stringify(v || []);
+    else if (k === 'kontrolni' || k === 'odkazy') f[col] = JSON.stringify(v || []);
     else if (k === 'termin' || k === 'zobrazitOd' || k === 'hotovo') f[col] = v ? iso(v) : null;
     else f[col] = v;
   }
@@ -271,8 +271,14 @@ export async function createSpStore(cfg) {
       const s = await site();
       const status = await store.listStatus();
       for (const st of status) {
-        if (st.exists) continue;
-        await graph('POST', `/sites/${s}/lists`, { displayName: st.name, columns: SCHEMA[st.key].map(colDef), list: { template: 'genericList' } });
+        if (!st.exists) {
+          await graph('POST', `/sites/${s}/lists`, { displayName: st.name, columns: SCHEMA[st.key].map(colDef), list: { template: 'genericList' } });
+          continue;
+        }
+        // u starších seznamů doplní sloupce přidané v nových verzích appky
+        const id = (await graph('GET', `/sites/${s}/lists?$select=id&$filter=displayName eq '${st.name}'`)).value[0].id;
+        const cols = new Set((await graphAll(`/sites/${s}/lists/${id}/columns?$select=name`)).map((c) => c.name));
+        for (const def of SCHEMA[st.key]) if (!cols.has(def[0])) await graph('POST', `/sites/${s}/lists/${id}/columns`, colDef(def));
       }
       Object.keys(listIds).forEach((k) => delete listIds[k]);
     },
@@ -303,6 +309,34 @@ export async function createSpStore(cfg) {
       for (const ex of existing) if (!found.has(ex.email) && ex.roleSkupiny.length) reqs.push({ method: 'PATCH', url: `${base}/${ex.id}/fields`, body: { RoleSkupiny: '' } });
       await batch(reqs);
       return { celkem: found.size, zmen: reqs.length };
+    },
+
+    /* ---------- dokumenty v OneDrivu / SharePointu ---------- */
+    /** Z vloženého odkazu (sdílení nebo adresa souboru) zjistí název a soubor v OneDrivu. */
+    async resolveLink(url) {
+      const b64 = btoa(unescape(encodeURIComponent(url))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+      const it = await graph('GET', `/shares/u!${b64}/driveItem?$select=id,name,webUrl,parentReference`);
+      return { u: url, n: it.name, d: it.parentReference?.driveId, i: it.id };
+    },
+    /** Soubor přetažený z Průzkumníka dohledá ve vlastním OneDrivu podle názvu (a velikosti). */
+    async findDriveFile(file) {
+      const q = encodeURIComponent(file.name.replace(/'/g, "''"));
+      const res = await graph('GET', `/me/drive/root/search(q='${q}')?$select=id,name,size,webUrl,parentReference,file&$top=50`);
+      const same = (res.value || []).filter((x) => x.file && x.name.toLowerCase() === file.name.toLowerCase());
+      const hit = same.find((x) => x.size === file.size) || same[0];
+      return hit ? { u: hit.webUrl, n: hit.name, d: hit.parentReference?.driveId, i: hit.id } : null;
+    },
+    /** Nasdílí soubory lidem z úkolu (bez e-mailové pozvánky, jen pro přihlášené ze školy). */
+    async shareLinks(links, emails, role = 'read') {
+      let ok = 0;
+      for (const l of links) {
+        if (!l.d || !l.i) continue;
+        await graph('POST', `/drives/${l.d}/items/${l.i}/invite`, {
+          recipients: emails.map((email) => ({ email })), requireSignIn: true, sendInvitation: false, roles: [role],
+        });
+        ok++;
+      }
+      return ok;
     },
 
     /* ---------- Outlook ---------- */

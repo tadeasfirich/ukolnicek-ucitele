@@ -4,7 +4,9 @@ Webová aplikace (PWA) pro ZŠ Karla Hašlera Libčice nad Vltavou: **co je pot�
 
 - úkoly pro sebe, pro kolegu, společné a plošné (na role)
 - rychlost **gepard = do zítra, zajíc = do konce týdne, šnek = do konce měsíce** – rychlost sama navrhne termín
-- **Práce na úkolu**: ťukneš na úkol a tam měníš stav (nezačato / rozpracováno / hotovo), odškrtáváš kroky, píšeš poznámku a posouváš termín. Na seznamu se stav kliknutím změnit nedá, aby se nic neoznačilo omylem
+- **Práce na úkolu**: ťukneš na úkol a tam měníš stav (nezačato / rozpracováno / hotovo), odškrtáváš kroky, píšeš poznámku a posouváš termín (i na libovolné datum z kalendáře). Na seznamu se stav kliknutím změnit nedá, aby se nic neoznačilo omylem
+- **kroky** jdou přidávat, odebírat a přesouvat za úchyt se dvěma tečkami – myší, prstem i šipkami na klávesnici
+- **dokumenty a odkazy** k úkolu: přetáhneš soubor ze složky OneDrive v Průzkumníku, nebo vložíš odkaz. U úkolů s více lidmi appka upozorní, že je potřeba dokument nasdílet, a umí ho nasdílet jedním tlačítkem
 - **státní svátky** (i pohyblivé Velikonoce) si appka spočítá sama pro každý rok, upozorní na blížící se volno a opakované úkoly je přeskakují; **jmeniny** a **mezinárodní dny** jdou vypnout v Nastavení
 - úkoly se objeví až v pravý čas (výkaz poslední týden v měsíci) a opakují se
 - opakované úkoly přeskakují prázdniny a volna z harmonogramu
@@ -45,6 +47,7 @@ Počítej asi s hodinou. Všechno děláš jako správce školního Microsoft 36
    - `Sites.ReadWrite.All`
    - `Calendars.ReadWrite`
    - `GroupMember.Read.All`
+   - `Files.ReadWrite.All` (dokumenty z OneDrivu a jejich sdílení kolegům)
 6. Klikni na **Udělit souhlas správce pro …** (bez toho by se každý učitel musel ptát na souhlas a `GroupMember.Read.All` by nefungovalo).
 
 > Návod Microsoftu: [Registrace jednostránkové aplikace](https://learn.microsoft.com/entra/identity-platform/scenario-spa-app-registration)
@@ -158,6 +161,13 @@ Plošný úkol „Všichni pedagogové“ provoz nedostane. Provozu ho dáš zvl
 - **Knihovna pro přihlášení** se načítá z cdn.jsdelivr.net (MSAL 5.27.0). Pokud by ji školní síť blokovala, stáhni ji do repozitáře a změň adresu v `js/store-sp.js`.
 
 ---
+
+## Dokumenty z OneDrivu
+
+- **Na počítači:** soubor ze složky OneDrive v Průzkumníku přetáhni do pole *Dokumenty a odkazy*. Prohlížeč appce neprozradí, kde soubor leží – appka ho proto dohledá ve tvém OneDrivu podle názvu a velikosti a uloží odkaz, který se otevře v Office na webu. Soubor musí být synchronizovaný (zelená fajfka nebo mráček).
+- **Na mobilu a tabletu:** v aplikaci OneDrive u souboru *⋯ → Sdílet → Kopírovat odkaz* a odkaz vlož.
+- **Sdílení:** dokument z tvého OneDrivu vidíš jen ty. U úkolu s dalšími lidmi appka ukáže upozornění a tlačítko **Sdílet s nimi** – nasdílí soubor všem z úkolu (u společného úkolu s úpravami, jinak jen ke čtení), bez otravných e-mailů. Pod tlačítkem *Jak sdílet ručně* je návod pro Průzkumník i mobil.
+- Odkaz přidaný zadavatelem dostanou všichni, kdo úkol mají. Odkaz přidaný někým jiným je jen jeho (u společného úkolu všech řešitelů).
 
 ## Svátky, jmeniny a mezinárodní dny
 

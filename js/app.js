@@ -4,7 +4,7 @@ import { parseCsv, tasksFromCsv, eventsFromCsv, toCsv } from './csv.js';
 import * as D from './dny.js';
 
 const cfg = window.UKOLNICEK_CONFIG || { mode: 'demo' };
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const $app = document.getElementById('app');
 
 const S = {
@@ -45,6 +45,9 @@ const I = {
   people: '<circle cx="9" cy="9" r="3.2"/><path d="M3 19c.9-3 3.2-4.6 6-4.6s5.1 1.6 6 4.6"/><circle cx="17" cy="8" r="2.5"/><path d="M16 13.6c2.4 0 4.2 1.4 5 3.9"/>',
   shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6L12 3z"/>',
   undo: '<path d="M8 6L3.5 10.5 8 15"/><path d="M4 10.5h10a5.5 5.5 0 010 11h-3"/>',
+  link: '<path d="M10 14a4.5 4.5 0 006.4 0l3-3a4.5 4.5 0 00-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 00-6.4 0l-3 3a4.5 4.5 0 006.4 6.4l1.2-1.2"/>',
+  file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+  share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/><path d="M8.7 10.8l6.6-4M8.7 13.2l6.6 4"/>',
   bell: '<path d="M6 16.5V11a6 6 0 1112 0v5.5l1.5 2h-15l1.5-2z"/><path d="M10 20.5a2 2 0 004 0"/>',
 };
 const icon = (n, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n]}</svg>`;
@@ -788,12 +791,20 @@ function detailHtml(a) {
     ...(t?.zdroj && !['Ručně', 'Ukázka'].includes(t.zdroj) ? [['Zdroj', h(t.zdroj)]] : []),
   ];
   const today = C.startOfDay(new Date());
+  const sunday = C.addDays(C.startOfWeek(today), 6);
+  let monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  if (C.diffDays(monthEnd, today) < 1) monthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
   const shifts = canEdit && !t.opakovani ? [
-    ['Zítra', C.suggestDue('gepard', today, S.hol)],
-    ['Konec týdne', C.suggestDue('zajic', today, S.hol)],
+    ['Zítra', C.addDays(today, 1)],
+    ['Konec týdne', sunday],
     ['Za týden', C.addDays(today, 7)],
-    ['Konec měsíce', C.suggestDue('snek', today, S.hol)],
-  ].filter(([, dd], i, arr) => arr.findIndex(([, x]) => C.ymd(x) === C.ymd(dd)) === i) : [];
+    ['Konec příštího týdne', C.addDays(sunday, 7)],
+    ['Konec měsíce', monthEnd],
+  ] : [];
+  const links = a.odkazy || [];
+  const others2 = t ? [...C.recipientsOf(t, S.people).keys()].filter((e) => e !== S.me.email) : [];
+  const unshared = links.filter((l) => !l.sdileno);
+  const sp = S.store.mode === 'sharepoint';
 
   return `
     ${sheetHead(a.nazev, 'Práce na úkolu')}
@@ -812,7 +823,9 @@ function detailHtml(a) {
     <section class="d-sec">
       <div class="d-h"><span class="eyebrow">Kroky</span>${steps.length ? `<b class="d-count">${doneK} z ${steps.length}</b>` : ''}</div>
       ${steps.length ? `<div class="bar thin"><i style="width:${Math.round(doneK / steps.length * 100)}%"></i></div>` : '<p class="small muted">Rozděl si úkol na menší kroky – odškrtávání malých kroků pomáhá to dotáhnout.</p>'}
-      <ul class="steps">${steps.map((k, i) => `<li class="${k.done ? 'done' : ''}">
+      <ul class="steps" data-id="${a.id}">${steps.map((k, i) => `<li class="${k.done ? 'done' : ''}" data-i="${i}">
+        ${steps.length > 1 ? `<button class="grip" data-id="${a.id}" data-i="${i}" aria-label="Přesunout krok ${h(k.t)}. Táhni, nebo použij šipky nahoru a dolů." title="Chyť a přesuň">
+          <i></i><i></i></button>` : '<span class="grip-sp"></span>'}
         <button class="step" role="checkbox" aria-checked="${!!k.done}" data-act="check" data-id="${a.id}" data-i="${i}">
           <span class="box">${k.done ? CHECK_SVG : ''}</span><span class="tx">${h(k.t)}</span></button>
         ${k.own || canEdit ? `<button class="iconbtn sm" data-act="rm-step" data-id="${a.id}" data-i="${i}" aria-label="Odebrat krok ${h(k.t)}">${icon('close')}</button>` : ''}
@@ -823,10 +836,30 @@ function detailHtml(a) {
       </form>
     </section>
 
-    ${t && (t.plan || (canEdit && a.typ === 'osobni')) ? `<section class="d-sec"><div class="d-h"><span class="eyebrow">Kdy a kde na tom budu pracovat</span></div>
-      ${canEdit && a.typ === 'osobni'
-        ? `<input type="text" data-act="plan" data-id="${t.id}" value="${h(t.plan)}" placeholder="Např. v úterý po 6. hodině v kabinetu">`
-        : `<div class="say">${h(t.plan)}</div>`}</section>` : ''}
+    <section class="d-sec docs" data-id="${a.id}">
+      <div class="d-h"><span class="eyebrow">Dokumenty a odkazy</span></div>
+      ${links.length ? `<ul class="links">${links.map((l, i) => `<li>
+        ${l.u ? `<a class="lnk" href="${h(l.u)}" target="_blank" rel="noopener">${icon(l.d || /sharepoint|onedrive|1drv/.test(l.u) ? 'file' : 'link')}<span><b>${h(l.n || l.u)}</b><small>${h(linkHost(l))}${others2.length ? (l.sdileno ? ' – nasdíleno' : ' – zatím jen pro tebe') : ''}</small></span></a>`
+          : `<span class="lnk">${icon('file')}<span><b>${h(l.n)}</b><small>V ukázce bez odkazu – v ostrém provozu se tu otevře soubor z OneDrive${others2.length && l.sdileno ? ' – nasdíleno' : ''}</small></span></span>`}
+        ${l.own || canEdit ? `<button class="iconbtn sm" data-act="rm-link" data-id="${a.id}" data-i="${i}" aria-label="Odebrat ${h(l.n || 'odkaz')}">${icon('close')}</button>` : ''}
+      </li>`).join('')}</ul>` : ''}
+      ${others2.length && unshared.length ? `<div class="sharewarn" role="note">
+        <b>Kolegové ${unshared.length > 1 ? 'tyhle dokumenty' : 'tenhle dokument'} zatím nevidí.</b>
+        <span>Uvidí ${unshared.length > 1 ? 'je' : 'ho'}, až ${unshared.length > 1 ? 'je' : 'ho'} s nimi nasdílíš – ${others2.length} ${plural(others2.length, 'člověk', 'lidé', 'lidí')} z tohoto úkolu.</span>
+        <div class="row-actions">
+          <button class="btn small primary" data-act="share-links" data-id="${a.id}">${icon('share')}Sdílet s ${plural(others2.length, 'ním', 'nimi', 'nimi')}</button>
+          <button class="btn small ghost" data-act="share-help">Jak sdílet ručně</button>
+        </div>
+      </div>` : ''}
+      <div class="drop" data-drop="${a.id}">
+        <p class="small drop-pc">Přetáhni sem soubor ze složky <b>OneDrive</b> v Průzkumníku, nebo vlož odkaz.</p>
+        <p class="small drop-touch">Vlož odkaz. V aplikaci OneDrive: u souboru <b>⋯ → Sdílet → Kopírovat odkaz</b>.</p>
+        <form class="addlink" data-act="add-link" data-id="${a.id}">
+          <input type="url" name="url" placeholder="Vlož odkaz na dokument…" aria-label="Odkaz na dokument" autocomplete="off">
+          <button class="btn small" type="submit">${icon('plus')}Přidat</button>
+        </form>
+      </div>
+    </section>
 
     <section class="d-sec"><label class="field"><span class="eyebrow">Poznámka pro mě</span>
       <textarea rows="2" data-act="note" data-id="${a.id}" placeholder="Co je potřeba si pamatovat…">${h(a.poznamka)}</textarea></label></section>
@@ -834,13 +867,25 @@ function detailHtml(a) {
     <dl class="d-info">${info.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
 
     ${shifts.length ? `<section class="d-sec"><div class="d-h"><span class="eyebrow">Posunout termín</span></div>
-      <div class="chips wrapchips">${shifts.map(([l, dd]) => `<button class="chip" data-act="shift" data-id="${t.id}" data-v="${C.ymd(dd)}">${l} <span>${C.fmtWeekday(dd)} ${C.fmtDate(dd)}</span></button>`).join('')}</div></section>` : ''}
+      <div class="chips wrapchips">${shifts.map(([l, dd]) => `<button class="chip" data-act="shift" data-id="${t.id}" data-v="${C.ymd(dd)}">${l} <span>${C.fmtWeekday(dd)} ${C.fmtDate(dd)}</span></button>`).join('')}
+        <span class="pickwrap"><button class="chip chip-pick" data-act="pick-date">${icon('cal')}Vybrat datum</button>
+          <input type="date" class="pickdate" data-act="shift-pick" data-id="${t.id}" min="${C.ymd(today)}" value="${C.ymd(new Date(a.termin))}" aria-label="Vybrat nový termín" tabindex="-1"></span></div></section>` : ''}
 
     <div class="row-actions d-actions">
       <button class="btn ghost" data-act="ics-one" data-id="${a.id}">${icon('cal')}Do kalendáře</button>
       ${canEdit ? `<button class="btn ghost" data-act="edit-task" data-id="${t.id}">${icon('edit')}Upravit</button>
         <button class="btn ghost danger" data-act="delete-task" data-id="${t.id}">${icon('trash')}Smazat</button>` : ''}
     </div>`;
+}
+
+function linkHost(l) {
+  if (!l.u) return '';
+  try {
+    const u = new URL(l.u);
+    if (/sharepoint\.com$/.test(u.hostname)) return u.hostname.includes('-my.') ? 'OneDrive' : 'SharePoint';
+    if (/1drv\.ms|onedrive/.test(u.hostname)) return 'OneDrive';
+    return u.hostname.replace(/^www\./, '');
+  } catch { return ''; }
 }
 
 /** Otevře Práci na úkolu; když už je otevřená, jen ji překreslí (bez blikání a skoku). */
@@ -976,9 +1021,6 @@ function formHtml() {
           <input type="text" data-f="_tags" value="${h((F.stitky || []).join(', '))}" placeholder="Např. Klasifikace, Akce">
           <div class="chips">${tags.filter((t) => !(F.stitky || []).includes(t)).slice(0, 8).map((t) => `<button type="button" class="chip" data-act="f-tag" data-v="${h(t)}">+ ${h(t)}</button>`).join('')}</div></div>
         <label class="field"><span class="eyebrow">Kroky (každý na nový řádek)</span><textarea rows="3" data-f="_kroky" placeholder="Opravit&#10;Zapsat známky&#10;Rozdat">${h((F.kontrolni || []).join('\n'))}</textarea></label>
-        ${F.typ === 'osobni' ? `<label class="field"><span class="eyebrow">Kdy a kde na tom budu pracovat?</span>
-          <input type="text" data-f="plan" value="${h(F.plan)}" placeholder="Např. v úterý po 6. hodině v kabinetu">
-          <span class="small muted">Konkrétní plán „kdy a kde“ výrazně zvyšuje šanci, že úkol opravdu uděláš.</span></label>` : ''}
         <label class="switch"><input type="checkbox" data-f="outlook" ${F.outlook !== false ? 'checked' : ''}><span>Zapsat do Outlook kalendáře</span></label>
       </details>
 
@@ -1153,6 +1195,251 @@ async function savePlan(taskId, plan) {
   try { Object.assign(t, await S.store.saveTask({ ...t, plan })); toast('Plán uložen.'); } catch (e) { showError(e); }
 }
 
+/* ---------- kroky: pořadí ---------- */
+
+async function reorderStep(id, from, to) {
+  const a = S.mine.find((x) => x.id === id);
+  if (!a || from === to || !a.kontrolni[from]) return;
+  const k = [...a.kontrolni];
+  const [moved] = k.splice(from, 1);
+  k.splice(Math.max(0, Math.min(k.length, to)), 0, moved);
+  a.kontrolni = k;
+  render();
+  openDetail(id);
+  try {
+    const targets = await sharedTargets(a);
+    await S.store.updateAssignments(targets.map((x) => ({ id: x.id, patch: { kontrolni: k } })));
+    const t = S.tasks.find((x) => x.id === a.ukolId);
+    if (canEditTask(t)) {
+      // nové pořadí zůstane i v zadání (pro ty, komu se úkol teprve objeví)
+      const order = k.filter((s2) => !s2.own).map((s2) => s2.t);
+      if (JSON.stringify(order) !== JSON.stringify(t.kontrolni || [])) Object.assign(t, await S.store.saveTask({ ...t, kontrolni: order }));
+    }
+  } catch (e) { showError(e); }
+}
+
+/* Přesouvání kroků za úchyt: jeden kód pro myš, prst i pero (Pointer Events). */
+let drag = null;
+document.addEventListener('pointerdown', (e) => {
+  const grip = e.target.closest('.grip');
+  if (!grip || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  e.preventDefault();
+  const li = grip.closest('li');
+  const ul = li.parentElement;
+  const items = [...ul.children];
+  const scroller = li.closest('.sheet-in');
+  drag = {
+    grip, li, ul, items, id: grip.dataset.id, from: items.indexOf(li), to: items.indexOf(li),
+    startY: e.clientY, y: e.clientY, rects: items.map((x) => x.getBoundingClientRect()),
+    scroller, startScroll: scroller ? scroller.scrollTop : 0, raf: 0, moved: false,
+  };
+  grip.setPointerCapture?.(e.pointerId);
+  li.classList.add('dragging');
+  ul.classList.add('sorting');
+});
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  drag.y = e.clientY;
+  if (Math.abs(drag.y - drag.startY) > 3) drag.moved = true;
+  layoutDrag();
+  autoScroll();
+});
+function layoutDrag() {
+  const d = drag;
+  const scrollDelta = d.scroller ? d.scroller.scrollTop - d.startScroll : 0;
+  const dy = d.y - d.startY + scrollDelta;
+  const r = d.rects[d.from];
+  const center = r.top + r.height / 2 + dy;
+  const lo = d.rects[0].top, hi = d.rects[d.rects.length - 1].bottom;
+  d.li.style.transform = `translateY(${Math.max(lo - r.top, Math.min(hi - r.bottom, dy))}px)`;
+  let to = 0;
+  d.rects.forEach((rr, i) => { if (i !== d.from && rr.top + rr.height / 2 < center) to++; });
+  d.to = to;
+  d.items.forEach((x, i) => {
+    if (i === d.from) return;
+    let shift = 0;
+    if (d.from < to && i > d.from && i <= to) shift = -r.height;
+    if (d.from > to && i < d.from && i >= to) shift = r.height;
+    x.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+function autoScroll() {
+  const d = drag;
+  if (!d?.scroller) return;
+  cancelAnimationFrame(d.raf);
+  const box = d.scroller.getBoundingClientRect();
+  const edge = 70;
+  let v = 0;
+  if (d.y < box.top + edge) v = -Math.ceil((box.top + edge - d.y) / 6);
+  else if (d.y > box.bottom - edge) v = Math.ceil((d.y - (box.bottom - edge)) / 6);
+  if (!v) return;
+  d.scroller.scrollTop += v;
+  layoutDrag();
+  d.raf = requestAnimationFrame(autoScroll);
+}
+function endDrag(cancel) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  cancelAnimationFrame(d.raf);
+  d.items.forEach((x) => { x.style.transform = ''; });
+  d.li.classList.remove('dragging');
+  d.ul.classList.remove('sorting');
+  if (!cancel && d.moved && d.to !== d.from) reorderStep(d.id, d.from, d.to);
+}
+document.addEventListener('pointerup', () => endDrag(false));
+document.addEventListener('pointercancel', () => endDrag(true));
+document.addEventListener('keydown', (e) => {
+  const grip = e.target.closest?.('.grip');
+  if (!grip || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  e.preventDefault();
+  const from = +grip.dataset.i;
+  const to = from + (e.key === 'ArrowUp' ? -1 : 1);
+  const a = S.mine.find((x) => x.id === grip.dataset.id);
+  if (!a || to < 0 || to >= a.kontrolni.length) return;
+  reorderStep(a.id, from, to).then(() => document.querySelector(`dialog.detail .grip[data-i="${to}"]`)?.focus());
+});
+
+/* ---------- dokumenty a odkazy ---------- */
+
+function guessName(url) {
+  try {
+    const u = new URL(url);
+    const last = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '');
+    if (/sharepoint\.com$|1drv\.ms/.test(u.hostname) && (!last.includes('.') || last.length > 60)) return 'Dokument v OneDrive';
+    return last && last.length < 80 ? last : u.hostname;
+  } catch { return url; }
+}
+
+/**
+ * Uloží odkazy. Zadavatel mění zadání (dostanou je všichni, kdo úkol mají),
+ * ostatní – nebo kdo mění vlastní odkaz – jen svůj úkol (u společného i ostatním řešitelům).
+ */
+async function changeLinks(a, fn, { own = false } = {}) {
+  const t = S.tasks.find((x) => x.id === a.ukolId);
+  if (!own && canEditTask(t)) {
+    const tmpl = fn((a.odkazy || []).filter((l) => !l.own));
+    Object.assign(t, await S.store.saveTask({ ...t, odkazy: tmpl }));
+    await materialize({ taskIds: new Set([t.id]) });
+    await reloadMine();
+  } else {
+    a.odkazy = fn(a.odkazy || []);
+    const targets = await sharedTargets(a);
+    await S.store.updateAssignments(targets.map((x) => ({ id: x.id, patch: { odkazy: a.odkazy } })));
+  }
+}
+
+async function addLinks(id, list) {
+  const a = S.mine.find((x) => x.id === id);
+  if (!a || !list.length) return;
+  busy(1);
+  try {
+    const own = !canEditTask(S.tasks.find((x) => x.id === a.ukolId));
+    await changeLinks(a, (cur) => {
+      const keys = new Set(cur.map(C.linkKey));
+      return [...cur, ...list.filter((l) => !keys.has(C.linkKey(l))).map((l) => ({ ...l, ...(own ? { own: true } : {}) }))];
+    }, { own });
+    render();
+    openDetail(id);
+    const t = S.tasks.find((x) => x.id === a.ukolId);
+    const others = t ? [...C.recipientsOf(t, S.people).keys()].filter((e) => e !== S.me.email).length : 0;
+    toast(others ? 'Přidáno. Nezapomeň dokument nasdílet kolegům.' : 'Dokument přidán.', others ? { tone: 'warn' } : {});
+  } catch (e) { showError(e); } finally { busy(-1); }
+}
+
+async function addLinkFromInput(id, url) {
+  url = (url || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) { toast('Tohle nevypadá jako odkaz. Má začínat https://', { tone: 'warn' }); return; }
+  let link = { u: url, n: guessName(url) };
+  if (S.store.resolveLink && /sharepoint\.com|1drv\.ms|onedrive/i.test(url)) {
+    try { link = await S.store.resolveLink(url); } catch (e) { console.warn('resolveLink', e); }
+  }
+  await addLinks(id, [link]);
+}
+
+async function addDropped(id, dt) {
+  const files = [...(dt.files || [])];
+  const uris = (dt.getData('text/uri-list') || '').split('\n').map((x) => x.trim()).filter((x) => x && !x.startsWith('#'));
+  const out = [];
+  const missing = [];
+  if (files.length) {
+    busy(1);
+    try {
+      for (const f of files) {
+        if (S.store.findDriveFile) {
+          const hit = await S.store.findDriveFile(f).catch(() => null);
+          if (hit) out.push(hit); else missing.push(f.name);
+        } else out.push({ u: '', n: f.name });
+      }
+    } finally { busy(-1); }
+  }
+  for (const u of uris) out.push({ u, n: guessName(u) });
+  if (missing.length) toast(`V tvém OneDrivu jsem nenašel: ${missing.join(', ')}. Je soubor ve složce OneDrive a synchronizovaný? Můžeš vložit odkaz.`, { tone: 'warn' });
+  if (out.length) await addLinks(id, out);
+}
+
+async function removeLink(id, i) {
+  const a = S.mine.find((x) => x.id === id);
+  const l = a?.odkazy?.[i];
+  if (!l) return;
+  busy(1);
+  try {
+    await changeLinks(a, (cur) => cur.filter((x) => C.linkKey(x) !== C.linkKey(l)), { own: !!l.own });
+    render();
+    openDetail(id);
+  } catch (e) { showError(e); } finally { busy(-1); }
+}
+
+async function shareLinksOf(id) {
+  const a = S.mine.find((x) => x.id === id);
+  const t = a && S.tasks.find((x) => x.id === a.ukolId);
+  if (!a || !t) return;
+  const emails = [...C.recipientsOf(t, S.people).keys()].filter((e) => e !== S.me.email);
+  const todo = (a.odkazy || []).filter((l) => !l.sdileno);
+  if (!emails.length || !todo.length) return;
+  busy(1);
+  try {
+    let manual = 0;
+    if (S.store.shareLinks) {
+      const auto = todo.filter((l) => l.d && l.i);
+      manual = todo.length - auto.length;
+      await S.store.shareLinks(auto, emails, a.typ === 'spolecny' ? 'write' : 'read');
+    }
+    const done = new Set(todo.filter((l) => !S.store.shareLinks || (l.d && l.i)).map(C.linkKey));
+    const mark = (cur) => cur.map((l) => (done.has(C.linkKey(l)) ? { ...l, sdileno: true } : l));
+    if (canEditTask(t) && todo.some((l) => !l.own)) await changeLinks(a, mark);
+    if (todo.some((l) => l.own) || !canEditTask(t)) await changeLinks(a, mark, { own: true });
+    render();
+    openDetail(id);
+    if (S.store.mode === 'demo') toast(`V ukázce se nesdílí doopravdy. V ostrém provozu dostane přístup ${emails.length} ${plural(emails.length, 'člověk', 'lidé', 'lidí')}.`);
+    else toast(manual ? `Nasdíleno. ${manual} ${plural(manual, 'odkaz', 'odkazy', 'odkazů')} appka nepoznala jako soubor – nasdílej ručně.` : `Nasdíleno ${emails.length} ${plural(emails.length, 'člověku', 'lidem', 'lidem')}.`, manual ? { tone: 'warn' } : {});
+  } catch (e) {
+    showError(e.status === 403 ? { message: 'Tenhle soubor nasdílet nemůžeš – patří někomu jinému. Požádej autora, ať ho nasdílí.' } : e);
+  } finally { busy(-1); }
+}
+
+function shareHelp() {
+  const d = sheet(`${sheetHead('Jak nasdílet dokument', 'Návod')}
+    <div class="help-steps">
+      <h3>Na počítači (Průzkumník souborů)</h3>
+      <ol>
+        <li>Najdi soubor ve složce <b>OneDrive</b>.</li>
+        <li>Klikni na něj pravým tlačítkem a zvol <b>Sdílet</b> (ikona OneDrivu).</li>
+        <li>Napiš jména kolegů z úkolu a nech zapnuté <b>Může upravovat</b>, pokud na tom máte pracovat spolu.</li>
+        <li>Klikni na <b>Odeslat</b>. Kolegové dostanou e-mail s odkazem.</li>
+      </ol>
+      <h3>Na telefonu (aplikace OneDrive)</h3>
+      <ol>
+        <li>U souboru ťukni na <b>⋯</b> a pak <b>Sdílet</b>.</li>
+        <li>Zvol <b>Pozvat lidi</b>, napiš jména kolegů a odešli.</li>
+      </ol>
+      <p class="small muted">Odkaz do úkolu vložíš přes <b>Sdílet → Kopírovat odkaz</b>. Tlačítko „Sdílet s nimi“ v úkolu udělá to samé za tebe – bez e-mailu, kolegové soubor rovnou otevřou z úkolu.</p>
+    </div>
+    <div class="row-actions"><button class="btn primary" data-act="close">Rozumím</button></div>`, 'confirm help');
+  return d;
+}
+
 async function deleteTask(id) {
   const t = S.tasks.find((x) => x.id === id);
   if (!t) return;
@@ -1271,7 +1558,10 @@ async function savePersonForm(form) {
 }
 
 function toast(msg, { action, onAction, tone } = {}) {
-  const box = document.getElementById('toasts');
+  // když je otevřené okno, musí být hláška v něm – jinak by na mobilu zůstala schovaná pod ním
+  const dlg = document.querySelector('dialog.sheet[open]');
+  let box = dlg ? dlg.querySelector('.toasts') : document.getElementById('toasts');
+  if (dlg && !box) { box = document.createElement('div'); box.className = 'toasts in-dialog'; box.setAttribute('aria-live', 'polite'); dlg.appendChild(box); }
   if (!box) return;
   const el = document.createElement('div');
   el.className = `toast ${tone || ''}`;
@@ -1310,7 +1600,7 @@ document.addEventListener('click', async (e) => {
   const act = el.dataset.act;
   const id = el.dataset.id;
   const v = el.dataset.v;
-  const fieldActs = ['note', 'plan', 'search', 'pref-outlook', 'pref-names', 'pref-intl', 'f-role', 'pv-toggle', 'import-file'];
+  const fieldActs = ['note', 'plan', 'shift-pick', 'search', 'pref-outlook', 'pref-names', 'pref-intl', 'f-role', 'pv-toggle', 'import-file'];
   if (fieldActs.includes(act)) return;
   switch (act) {
     case 'login': return S.store.login();
@@ -1322,6 +1612,14 @@ document.addEventListener('click', async (e) => {
     case 'check': return toggleCheck(id, +el.dataset.i);
     case 'rm-step': return removeStep(id, +el.dataset.i);
     case 'shift': return shiftTask(id, v, document.querySelector('dialog.detail')?.dataset.id);
+    case 'pick-date': {
+      const inp = el.parentElement.querySelector('.pickdate');
+      try { inp.showPicker(); } catch { inp.focus(); inp.click(); }
+      return;
+    }
+    case 'rm-link': return removeLink(id, +el.dataset.i);
+    case 'share-links': return shareLinksOf(id);
+    case 'share-help': return shareHelp();
     case 'open': return openDetail(id);
     case 'set-status': return setStatus(id, +v);
     case 'filter': S.filter = v; return render();
@@ -1395,6 +1693,7 @@ document.addEventListener('change', async (e) => {
     return;
   }
   if (act === 'plan') return savePlan(el.dataset.id, el.value.trim());
+  if (act === 'shift-pick' && el.value) return shiftTask(el.dataset.id, el.value, document.querySelector('dialog.detail')?.dataset.id);
   if (act === 'pref-names') { pref.set('showNames', el.checked); return; }
   if (act === 'pref-intl') { pref.set('showIntl', el.checked); return; }
   if (act === 'note') {
@@ -1425,6 +1724,26 @@ document.addEventListener('submit', (e) => {
   if (f.dataset.act === 'form-submit') { e.preventDefault(); submitForm(); }
   if (f.dataset.act === 'person-submit') { e.preventDefault(); savePersonForm(f); }
   if (f.dataset.act === 'add-step') { e.preventDefault(); addStep(f.dataset.id, new FormData(f).get('krok')); }
+  if (f.dataset.act === 'add-link') { e.preventDefault(); addLinkFromInput(f.dataset.id, new FormData(f).get('url')); }
+});
+
+document.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer || ![...e.dataTransfer.types].some((t) => t === 'Files' || t === 'text/uri-list')) return;
+  e.preventDefault(); // jinak by prohlížeč soubor otevřel místo appky
+  const z = e.target.closest?.('[data-drop]');
+  document.querySelectorAll('[data-drop].over').forEach((x) => { if (x !== z) x.classList.remove('over'); });
+  if (z) { z.classList.add('over'); e.dataTransfer.dropEffect = 'copy'; } else e.dataTransfer.dropEffect = 'none';
+});
+document.addEventListener('dragleave', (e) => {
+  const z = e.target.closest?.('[data-drop]');
+  if (z && !z.contains(e.relatedTarget)) z.classList.remove('over');
+});
+document.addEventListener('drop', (e) => {
+  if (!e.dataTransfer) return;
+  e.preventDefault();
+  const z = e.target.closest?.('[data-drop]');
+  document.querySelectorAll('[data-drop].over').forEach((x) => x.classList.remove('over'));
+  if (z) addDropped(z.dataset.drop, e.dataTransfer);
 });
 
 async function refreshListStatus() {

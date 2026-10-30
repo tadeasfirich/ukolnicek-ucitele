@@ -253,22 +253,48 @@ details.more summary::before { content: "+ "; font-family: var(--mono); }
 details.more[open] summary::before { content: "– "; }
 .form-foot { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0 calc(6px + env(safe-area-inset-bottom)); }
 
-/* ---------- list (bottom sheet) ---------- */
+/* ---------- okna (dialogy) ----------
+   mobil: Nový úkol, Upravit a Práce na úkolu přes celou obrazovku, potvrzení jako lišta zespodu
+   tablet a počítač: panel z pravé strany přes celou výšku */
+html:has(dialog.sheet[open]) { overflow: hidden; }
 dialog.sheet {
   border: 0; padding: 0; width: 100%; max-width: 100%; margin: auto 0 0; max-height: 92vh; max-height: 92dvh;
   border-radius: 14px 14px 0 0; background: var(--surface); color: var(--ink); box-shadow: 0 -6px 30px rgba(0, 0, 0, .2);
+  overflow: hidden;
 }
-dialog.sheet.full { height: 92vh; height: 92dvh; }
 dialog.sheet::backdrop { background: rgba(10, 14, 25, .5); }
 dialog[open].sheet { animation: up .22s ease-out; }
 @keyframes up { from { transform: translateY(30px); opacity: .4; } }
-.sheet-in { padding: 6px 18px 20px; overflow-y: auto; max-height: inherit; height: 100%; }
+.sheet-in { padding: 6px 18px 20px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; max-height: inherit; height: 100%; }
 .sheet-in::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 4px auto 6px; }
 .sh-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid var(--ink); }
 .sh-head h2 { font-size: 1.3rem; margin-top: 2px; overflow-wrap: anywhere; }
+@media (max-width: 699px) {
+  dialog.sheet.detail, dialog.sheet.form {
+    margin: 0; width: 100%; height: 100vh; height: 100dvh; max-height: 100dvh; border-radius: 0; box-shadow: none;
+  }
+  dialog.sheet.detail .sheet-in, dialog.sheet.form .sheet-in {
+    padding: 0 max(16px, env(safe-area-inset-left)) calc(20px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
+  }
+  dialog.sheet.detail .sheet-in::before, dialog.sheet.form .sheet-in::before { display: none; }
+  dialog.sheet.detail .sh-head, dialog.sheet.form .sh-head {
+    position: sticky; top: 0; z-index: 3; background: var(--surface); padding-top: max(12px, env(safe-area-inset-top)); margin: 0 0 12px;
+  }
+  dialog[open].sheet.detail, dialog[open].sheet.form { animation: fromright .2s ease-out; }
+}
 @media (min-width: 700px) {
-  dialog.sheet { max-width: 580px; margin: auto; border-radius: 10px; }
-  dialog.sheet.full { height: auto; max-height: 90vh; }
+  dialog.sheet {
+    margin: 0 0 0 auto; height: 100vh; height: 100dvh; max-height: 100dvh; width: min(580px, 94vw); max-width: 94vw;
+    border-radius: 12px 0 0 12px; box-shadow: -10px 0 40px rgba(0, 0, 0, .18);
+  }
+  dialog.sheet.form { width: min(680px, 94vw); }
+  dialog[open].sheet { animation: fromright .22s ease-out; }
+  dialog.sheet.confirm { margin: auto; height: auto; width: min(460px, 92vw); border-radius: 10px; animation: none; }
+  .sheet-in { padding: 0 28px 28px; }
+  .sheet-in::before { display: none; }
+  .sh-head { position: sticky; top: 0; z-index: 3; background: var(--surface); padding-top: 18px; }
+  .sh-head h2 { font-size: 1.5rem; }
+  dialog.sheet.confirm .sheet-in { padding-top: 0; }
 }
 .d-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 14px; font-size: .9rem; }
 .d-popis { margin: 12px 0; }
@@ -476,17 +502,6 @@ dialog[open].sheet { animation: up .22s ease-out; }
   .main-zadane .seg { max-width: 520px; }
   .search { max-width: 640px; }
 
-  /* dialogy jako panel z pravé strany */
-  dialog.sheet {
-    margin: 0 0 0 auto; height: 100vh; height: 100dvh; max-height: 100dvh; width: min(580px, 94vw); max-width: 94vw;
-    border-radius: 12px 0 0 12px; box-shadow: -10px 0 40px rgba(0, 0, 0, .18);
-  }
-  dialog.sheet.form { width: min(680px, 94vw); }
-  dialog[open].sheet { animation: fromright .22s ease-out; }
-  dialog.sheet.confirm { margin: auto; height: auto; width: min(460px, 92vw); border-radius: 10px; animation: none; }
-  .sheet-in { padding: 18px 28px 28px; }
-  .sheet-in::before { display: none; }
-  .sh-head h2 { font-size: 1.5rem; }
 }
 @keyframes fromright { from { transform: translateX(40px); opacity: .3; } }
 
@@ -543,3 +558,56 @@ dialog[open].sheet { animation: up .22s ease-out; }
   .side-i, .step { min-height: 56px; }
   .chip { min-height: 42px; }
 }
+
+/* =====================================================================
+   Kroky: přesouvání za úchyt (dvě tečky nad sebou)
+   ===================================================================== */
+.grip {
+  flex: none; width: 34px; align-self: stretch; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 0; background: none; padding: 0; cursor: grab; touch-action: none; color: var(--line-strong); border-radius: 4px;
+  -webkit-user-select: none; user-select: none;
+}
+.grip i { display: block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.grip:hover, .grip:focus-visible { color: var(--accent-text); background: var(--accent-soft); }
+.grip-sp { flex: none; width: 34px; }
+.steps.sorting { cursor: grabbing; -webkit-user-select: none; user-select: none; }
+.steps.sorting li { transition: transform .16s ease; }
+.steps li.dragging {
+  position: relative; z-index: 2; transition: none; background: var(--surface); cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(20, 23, 31, .22); border-radius: 6px; border-bottom-color: transparent;
+}
+.steps li.dragging .grip { color: var(--accent-text); }
+@media (hover: none) { .grip { width: 44px; color: var(--muted); } .grip-sp { width: 44px; } }
+
+/* =====================================================================
+   Dokumenty a odkazy
+   ===================================================================== */
+.links { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.links li { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.lnk { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 9px 10px; color: var(--ink); text-decoration: none; min-height: 52px; }
+a.lnk:hover b { color: var(--accent-text); text-decoration: underline; }
+.lnk .ico { color: var(--accent-text); }
+.lnk > span { display: flex; flex-direction: column; min-width: 0; }
+.lnk b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnk small { color: var(--muted); font-size: .8rem; }
+.sharewarn { border-left: 4px solid var(--amber-fill); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 6px 6px 0; margin: 0 0 10px; display: flex; flex-direction: column; gap: 2px; font-size: .92rem; }
+.sharewarn .row-actions { margin: 8px 0 0; }
+.drop { border: 2px dashed var(--line-strong); border-radius: 8px; padding: 10px 12px 12px; transition: background .15s, border-color .15s; }
+.drop p { margin: 0 0 8px; }
+.drop.over { border-color: var(--accent-text); background: var(--accent-soft); }
+.drop-touch { display: none; }
+@media (hover: none) { .drop-pc { display: none; } .drop-touch { display: block; } .drop { border-style: solid; border-width: 1px; } }
+.addlink { display: flex; gap: 8px; }
+.addlink input { flex: 1; min-height: 44px; }
+.help-steps h3 { font-size: 1rem; margin: 10px 0 6px; }
+.help-steps ol { margin: 0 0 8px; padding-left: 22px; }
+.help-steps li { margin-bottom: 5px; }
+
+/* posun termínu: vlastní datum */
+.pickwrap { position: relative; display: inline-flex; }
+.chip-pick { border-style: dashed; color: var(--accent-text); }
+.chip-pick .ico { width: 16px; height: 16px; }
+.pickdate { position: absolute; inset: auto 0 0 0; width: 100%; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; min-height: 0; }
+
+.toasts.in-dialog { left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom)); }
+@media (min-width: 700px) { .toasts.in-dialog { left: auto; right: 0; width: min(580px, 94vw); } }

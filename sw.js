@@ -1,5 +1,5 @@
 // Service worker: appka se otevře i bez signálu (data z Microsoftu se ale načtou až online).
-const CACHE = 'ukolnicek-1.1.0';
+const CACHE = 'ukolnicek-1.2.0';
 const SHELL = [
   './', 'index.html', 'config.js', 'css/app.css', 'manifest.webmanifest',
   'js/app.js', 'js/core.js', 'js/csv.js', 'js/dny.js', 'js/store-demo.js', 'js/store-sp.js',
