@@ -32,13 +32,13 @@ Počítej asi s hodinou. Všechno děláš jako správce školního Microsoft 36
 1. Na GitHubu založ nový repozitář, `Ukolnicek-ucitele` (může být veřejný – žádná data ani hesla v něm nejsou).
 2. Nahraj do něj **celý obsah** této složky (tlačítko *Add file → Upload files*, přetáhni všechno včetně složek).
 3. *Settings → Pages → Build and deployment*: Source **Deploy from a branch**, Branch **main**, složka **/ (root)** → *Save*.
-4. Za minutu poběží na `https://tadeasfirich.github.io/Ukolnicek-ucitele/`. Tuhle adresu budeš potřebovat v kroku 2.
+4. Za minutu poběží na `https://tadeasfirich.github.io/ukolnicek-ucitele/`. Tuhle adresu budeš potřebovat v kroku 2.
 
 ### Krok 2 – Registrace aplikace v Microsoft Entra ID
 
 1. Otevři [entra.microsoft.com](https://entra.microsoft.com) → **Identita → Aplikace → Registrace aplikací → Nová registrace**.
 2. Název: `Úkolníček učitele`. Podporované typy účtů: **Jenom účty v tomto organizačním adresáři**.
-3. Identifikátor URI pro přesměrování: platforma **Jednostránková aplikace (SPA)**, adresa `https://tadeasfirich.github.io/Ukolnicek-ucitele/` (přesně, i s lomítkem na konci) → **Zaregistrovat**.
+3. Identifikátor URI pro přesměrování: platforma **Jednostránková aplikace (SPA)**, adresa `https://tadeasfirich.github.io/ukolnicek-ucitele/` (přesně takhle – malými písmeny a s lomítkem na konci) → **Zaregistrovat**.
 4. Na stránce *Přehled* si opiš **ID aplikace (klienta)** a **ID adresáře (tenanta)**.
 5. **Oprávnění rozhraní API → Přidat oprávnění → Microsoft Graph → Delegovaná oprávnění** a zaškrtni:
    - `User.Read`
@@ -81,7 +81,7 @@ mode: 'sharepoint',
 clientId: 'ID aplikace z kroku 2',
 tenantId: 'ID adresáře z kroku 2',
 siteUrl: 'https://NAZEV.sharepoint.com/sites/ukolnicek',
-appUrl: 'https://tadeasfirich.github.io/Ukolnicek-ucitele/',
+appUrl: 'https://tadeasfirich.github.io/ukolnicek-ucitele/',
 spravci: ['tvuj.email@skola.libcice.cz'],
 ```
 

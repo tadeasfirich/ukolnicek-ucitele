@@ -18,7 +18,7 @@ window.UKOLNICEK_CONFIG = {
   listPrefix: 'UU_',
 
   // Adresa, kde appka běží (GitHub Pages) – pro odkazy v Outlooku a e-mailech
-  appUrl: 'https://tadeasfirich.github.io/Ukolnicek-ucitele/',
+  appUrl: 'https://tadeasfirich.github.io/ukolnicek-ucitele/',
 
   // Kdo je správce (vidí Správu, smí všechno)
   spravci: ['tadeas.firich@skola.libcice.cz'],
