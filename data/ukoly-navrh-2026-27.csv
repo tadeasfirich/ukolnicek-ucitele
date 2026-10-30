@@ -1,0 +1,28 @@
+nazev;popis;termin;cas;zobrazit_dni_predem;priorita;komu;typ;stitky;opakovani;zdroj
+Odevzdat výkaz pracovní doby;Vytisknout, podepsat a odevzdat do Budníku u Báry.;2026-11-27;07:30;4;gepard;ucitel|asistent;plosny;Administrativa;posledni-v-mesici;Návrh
+Zkontrolovat zápisy hodin v Škole OnLine;Doplnit chybějící zápisy a absenci za týden.;2026-11-06;14:00;2;snek;ucitel;plosny;Administrativa;tydne;Návrh
+Uzavřít absenci a omluvenky za měsíc;Zkontrolovat neomluvené hodiny a vyřídit omluvenky.;2026-11-27;14:00;4;zajic;tridni;plosny;Třídnictví;posledni-v-mesici;Návrh
+Vypsat termíny tripartit pro rodiče;Tripartitní schůzky probíhají v listopadu podle domluvy s třídním učitelem.;2026-11-06;14:00;10;gepard;tridni;plosny;Tripartity;;Harmonogram
+Uskutečnit tripartity se všemi rodinami;Do konce listopadu.;2026-11-30;;7;zajic;tridni;plosny;Tripartity;;Harmonogram
+Uzavřít hodnocení za 1. čtvrtletí;Pedagogická rada 24. 11. 2026. Známky a hodnocení v Škole OnLine.;2026-11-23;14:00;10;gepard;ucitel;plosny;Klasifikace;;Harmonogram
+Podklady o třídě na pedagogickou radu;Absence, výchovná opatření, pochvaly. Rada 24. 11. 2026.;2026-11-23;14:00;10;zajic;tridni;plosny;Klasifikace|Třídnictví;;Harmonogram
+Připravit výrobky třídy na Vánoční trhy;Vánoční trhy jsou v neděli 29. 11. 2026.;2026-11-27;;14;snek;tridni;plosny;Akce;;Harmonogram
+Připravit program Vánočního projektového dne;Projektový den je 21. 12. 2026.;2026-12-14;;14;zajic;ucitel;plosny;Akce;;Harmonogram
+Domluvit s třídou program vánoční besídky;Besídky jsou 22. 12. 2026.;2026-12-18;;10;snek;tridni;plosny;Akce|Třídnictví;;Harmonogram
+Odhlásit obědy 7. ročníku na lyžařský výcvik;Lyžák je 18.–22. 1. 2027.;2027-01-13;;7;zajic;provoz;plosny;Jídelna;;Harmonogram
+Uzavřít hodnocení za 1. pololetí;Pedagogická rada 19. 1. 2027. Pozor: týden 18.–22. 1. je lyžák 7. ročníku.;2027-01-15;14:00;10;gepard;ucitel;plosny;Klasifikace;;Harmonogram
+Podklady o třídě na pedagogickou radu (pololetí);Absence, výchovná opatření, pochvaly. Rada 19. 1. 2027.;2027-01-15;14:00;10;zajic;tridni;plosny;Klasifikace|Třídnictví;;Harmonogram
+Vytisknout a podepsat pololetní výpisy;Pololetní vysvědčení se rozdává 28. 1. 2027.;2027-01-27;14:00;7;gepard;tridni;plosny;Vysvědčení;;Harmonogram
+Připravit učebnu na Den otevřených dveří;Den otevřených dveří je 4. 2. 2027.;2027-02-03;;7;snek;ucitel;plosny;Akce;;Harmonogram
+Zápis do 1. třídy: rozdělit stanoviště a role;Zápis 10. a 11. 2. 2027.;2027-02-03;;14;zajic;vedeni;plosny;Zápis;;Harmonogram
+Vypsat termíny dubnových tripartit;Tripartity probíhají v dubnu podle domluvy s třídním učitelem.;2027-04-02;14:00;7;gepard;tridni;plosny;Tripartity;;Harmonogram
+Uskutečnit dubnové tripartity se všemi rodinami;Do konce dubna.;2027-04-30;;7;zajic;tridni;plosny;Tripartity;;Harmonogram
+Uzavřít hodnocení za 3. čtvrtletí;Pedagogická rada 20. 4. 2027.;2027-04-19;14:00;10;gepard;ucitel;plosny;Klasifikace;;Harmonogram
+Podklady o třídě na pedagogickou radu (3. čtvrtletí);Absence, výchovná opatření, pochvaly. Rada 20. 4. 2027.;2027-04-19;14:00;10;zajic;tridni;plosny;Klasifikace|Třídnictví;;Harmonogram
+Škola v přírodě: zálohy, posudky a seznam žáků;ŠvP 7.–11. 6. a 14.–18. 6. 2027. Týká se tříd, které jedou.;2027-05-21;;21;zajic;tridni;plosny;Akce;;Harmonogram
+Odhlásit obědy na školy v přírodě;ŠvP 7.–11. 6. a 14.–18. 6. 2027.;2027-06-01;;10;zajic;provoz;plosny;Jídelna;;Harmonogram
+Slavnostní vyřazení 9. ročníku: program a pozvánky;Vyřazení 30. 6. 2027 dopoledne.;2027-06-18;;21;zajic;vedeni;plosny;Akce;;Harmonogram
+Uzavřít klasifikaci za 2. pololetí;Pedagogická rada 22. 6. 2027.;2027-06-21;14:00;14;gepard;ucitel;plosny;Klasifikace;;Harmonogram
+Podklady o třídě na pedagogickou radu (4. čtvrtletí);Absence, výchovná opatření, pochvaly. Rada 22. 6. 2027.;2027-06-21;14:00;14;zajic;tridni;plosny;Klasifikace|Třídnictví;;Harmonogram
+Vytisknout a podepsat vysvědčení;Vysvědčení se rozdává 30. 6. 2027 v 8:00.;2027-06-29;14:00;10;gepard;tridni;plosny;Vysvědčení;;Harmonogram
+Uklidit a předat učebnu na konci roku;;2027-06-30;;10;snek;ucitel;plosny;Akce;;Návrh
