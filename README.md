@@ -3,7 +3,9 @@
 Webová aplikace (PWA) pro ZŠ Karla Hašlera Libčice nad Vltavou: **co je potřeba udělat a kdy**. Každý učitel, asistent, člen vedení i provozu vidí jen to, co je teď na řadě – a ve správný moment mu to připomene Outlook a pondělní e-mail.
 
 - úkoly pro sebe, pro kolegu, společné a plošné (na role)
-- priorita **šnek / zajíc / gepard**, stav **nezačato / rozpracováno / hotovo**
+- rychlost **gepard = do zítra, zajíc = do konce týdne, šnek = do konce měsíce** – rychlost sama navrhne termín
+- **Práce na úkolu**: ťukneš na úkol a tam měníš stav (nezačato / rozpracováno / hotovo), odškrtáváš kroky, píšeš poznámku a posouváš termín. Na seznamu se stav kliknutím změnit nedá, aby se nic neoznačilo omylem
+- **státní svátky** (i pohyblivé Velikonoce) si appka spočítá sama pro každý rok, upozorní na blížící se volno a opakované úkoly je přeskakují; **jmeniny** a **mezinárodní dny** jdou vypnout v Nastavení
 - úkoly se objeví až v pravý čas (výkaz poslední týden v měsíci) a opakují se
 - opakované úkoly přeskakují prázdniny a volna z harmonogramu
 - hotové se schovají, dají se dohledat
@@ -156,6 +158,10 @@ Plošný úkol „Všichni pedagogové“ provoz nedostane. Provozu ho dáš zvl
 - **Knihovna pro přihlášení** se načítá z cdn.jsdelivr.net (MSAL 5.27.0). Pokud by ji školní síť blokovala, stáhni ji do repozitáře a změň adresu v `js/store-sp.js`.
 
 ---
+
+## Svátky, jmeniny a mezinárodní dny
+
+Všechno je zabudované přímo v appce (`js/dny.js`) a počítá se v zařízení – funguje bez internetu, pro jakýkoli rok a appka se nikde na nic neptá. Pevné státní svátky jsou daty v zákoně, Velký pátek a Velikonoční pondělí se počítají z data Velikonoc. Jmeniny jsou občanský kalendář ČR. Mezinárodní dny jsou výběr užitečný pro školu (např. Den učitelů 28. 3., Mezinárodní den matematiky 14. 3., Den bezpečnějšího internetu); další přidáš do seznamu `INTL_FIXED` v `js/dny.js`.
 
 ## Z jakého výzkumu návrh vychází
 

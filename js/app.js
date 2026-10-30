@@ -1,9 +1,10 @@
 // Úkolníček – uživatelské rozhraní.
 import * as C from './core.js';
 import { parseCsv, tasksFromCsv, eventsFromCsv, toCsv } from './csv.js';
+import * as D from './dny.js';
 
 const cfg = window.UKOLNICEK_CONFIG || { mode: 'demo' };
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const $app = document.getElementById('app');
 
 const S = {
@@ -98,8 +99,13 @@ async function loadAll() {
     S.store.people(), S.store.tasks(), S.store.events(), S.store.assignments({ osoba: S.me.email }),
   ]);
   S.people = people; S.tasks = tasks; S.events = events; S.mine = mine;
-  S.hol = C.holidaySet(events);
+  S.hol = holidays(events);
   S.zadane = null;
+}
+function holidays(events) {
+  const y = new Date().getFullYear();
+  const st = [y - 1, y, y + 1].flatMap((yy) => D.stateHolidays(yy).map((x) => x.datum));
+  return C.holidaySet(events, st);
 }
 async function reloadMine() { S.mine = await S.store.assignments({ osoba: S.me.email }); S.zadane = null; }
 
@@ -167,22 +173,35 @@ function render() {
   const v = VIEWS[S.view];
   const body = { moje: viewMoje, kalendar: viewKalendar, zadane: viewZadane, hotove: viewHotove, nastaveni: viewNastaveni, sprava: viewSprava }[S.view]();
   $app.innerHTML = `
-    <header class="top">
-      <div class="top-in">
-        <div>
-          <div class="eyebrow">${h(cfg.schoolShort || 'Úkolníček')}</div>
-          <h1>${h(v.title)}</h1>
+    <div class="shell">
+      <aside class="side" aria-label="Hlavní menu">
+        <a class="side-brand" href="#moje"><span class="logo">${logoSvg()}</span><span><b>Úkolníček</b><small>${h(cfg.schoolShort?.replace(/^Úkolníček\s*–\s*/, '') || 'učitele')}</small></span></a>
+        <button class="btn primary side-new" data-act="new">${icon('plus')}Nový úkol</button>
+        <nav class="side-nav">${['moje', 'kalendar', 'zadane', 'hotove'].map((k) => navItem(k, 'side-i')).join('')}</nav>
+        <div class="side-foot">
+          ${S.me.roles.has('spravce') ? navItem('sprava', 'side-i') : ''}
+          <a href="#nastaveni" class="side-me ${S.view === 'nastaveni' ? 'on' : ''}"><span class="avatar">${h(initials(S.me.jmeno))}</span><span><b>${h(S.me.jmeno)}</b><small>Nastavení</small></span></a>
         </div>
-        <div class="top-actions">
-          ${S.me.roles.has('spravce') ? `<a class="iconbtn ${S.view === 'sprava' ? 'on' : ''}" href="#sprava" aria-label="Správa">${icon('shield')}</a>` : ''}
-          <a class="avatar ${S.view === 'nastaveni' ? 'on' : ''}" href="#nastaveni" aria-label="Nastavení a můj účet">${h(initials(S.me.jmeno))}</a>
-        </div>
+      </aside>
+      <div class="content">
+        <header class="top">
+          <div class="top-in">
+            <div>
+              <div class="eyebrow">${h(cfg.schoolShort || 'Úkolníček')}</div>
+              <h1>${h(v.title)}</h1>
+            </div>
+            <div class="top-actions">
+              ${S.me.roles.has('spravce') ? `<a class="iconbtn ${S.view === 'sprava' ? 'on' : ''}" href="#sprava" aria-label="Správa">${icon('shield')}</a>` : ''}
+              <a class="avatar ${S.view === 'nastaveni' ? 'on' : ''}" href="#nastaveni" aria-label="Nastavení a můj účet">${h(initials(S.me.jmeno))}</a>
+            </div>
+          </div>
+          <div class="busybar"></div>
+        </header>
+        ${S.store.mode === 'demo' ? `<div class="demo-band">Ukázkový režim – data jsou jen v tomto prohlížeči. <a href="#nastaveni">Vyzkoušet jako jiná role</a></div>` : ''}
+        ${S.error ? `<div class="errband" role="alert">${h(S.error)} <button data-act="dismiss-error">Zavřít</button></div>` : ''}
+        <main class="main main-${S.view}">${body}</main>
       </div>
-      <div class="busybar"></div>
-    </header>
-    ${S.store.mode === 'demo' ? `<div class="demo-band">Ukázkový režim – data jsou jen v tomto prohlížeči. <a href="#nastaveni">Vyzkoušet jako jiná role</a></div>` : ''}
-    ${S.error ? `<div class="errband" role="alert">${h(S.error)} <button data-act="dismiss-error">Zavřít</button></div>` : ''}
-    <main class="main">${body}</main>
+    </div>
     <nav class="nav" aria-label="Hlavní menu">
       ${navItem('moje')}${navItem('kalendar')}
       <button class="fab" data-act="new" aria-label="Nový úkol">${icon('plus')}<span>Nový</span></button>
@@ -190,11 +209,15 @@ function render() {
     </nav>
     <div class="toasts" id="toasts" aria-live="polite"></div>`;
   if (S.view === 'sprava' && S.admin === 'napojeni' && S.store.listStatus) refreshListStatus();
+  // otevřená Práce na úkolu se po změně dat překreslí, aby neukazovala starý stav
+  const dd = document.querySelector('dialog.sheet.detail');
+  if (dd && S.mine.some((a) => a.id === dd.dataset.id)) openDetail(dd.dataset.id);
 }
-function navItem(k) {
+
+function navItem(k, cls = 'nav-i') {
   const v = VIEWS[k];
   const badge = k === 'moje' ? visibleOpen().filter((a) => new Date(a.termin) < C.addDays(C.startOfDay(new Date()), 1)).length : 0;
-  return `<a href="#${k}" class="nav-i ${S.view === k ? 'on' : ''}" ${S.view === k ? 'aria-current="page"' : ''}>${icon(v.icon)}<span>${v.nav}</span>${badge ? `<b class="badge">${badge}</b>` : ''}</a>`;
+  return `<a href="#${k}" class="${cls} ${S.view === k ? 'on' : ''}" ${S.view === k ? 'aria-current="page"' : ''}>${icon(v.icon)}<span>${v.nav || v.title}</span>${badge ? `<b class="badge" aria-label="${badge} na dnes nebo po termínu">${badge}</b>` : ''}</a>`;
 }
 
 function renderSplash(msg) {
@@ -256,7 +279,7 @@ function viewMoje() {
     return `<section class="sec sec-${key}">
       <h2 class="sec-h">${title}<span class="cnt">${items.length}</span>
         ${opts.collapsible ? `<button class="linkbtn" data-act="toggle-later">${collapsed ? 'Ukázat' : 'Schovat'}</button>` : ''}</h2>
-      ${collapsed ? '' : items.map(card).join('')}
+      ${collapsed ? '' : `<div class="cards">${items.map(card).join('')}</div>`}
     </section>`;
   };
 
@@ -265,58 +288,83 @@ function viewMoje() {
       <div class="eyebrow">Jak na to – 3 kroky</div>
       <ol>
         <li><b>Tady vidíš, co máš udělat.</b> Nahoře to, co hoří.</li>
-        <li><b>Ťukni na kolečko</b>, když začneš. Ťukni znovu, když je hotovo – úkol se schová do Hotových.</li>
-        <li><b>Nový úkol</b> přidáš velkým plusem dole.</li>
+        <li><b>Ťukni na úkol</b> a otevře se Práce na úkolu. Tam označíš, že na něm pracuješ nebo že je hotový, a odškrtáš kroky.</li>
+        <li><b>Nový úkol</b> přidáš tlačítkem Nový.</li>
       </ol>
       <button class="btn small" data-act="intro-done">Rozumím</button>
     </div>`;
 
-  return `
-    <div class="hello"><div class="hello-l"><b>${hello}.</b>
-      <span class="muted">${C.fmtWeekday(now, true)} ${now.getDate()}. ${MONTHS_GEN[now.getMonth()]}</span></div></div>
-    ${tot ? `<div class="week">
-      <div class="week-t"><span class="eyebrow">Tento týden</span><b>hotovo ${doneW} z ${tot}</b></div>
-      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${doneW}"><i style="width:${Math.round(doneW / tot * 100)}%"></i></div>
-    </div>` : ''}
-    ${intro}
-    ${open.length ? `<div class="chips" role="group" aria-label="Filtr">
-      <button class="chip ${S.filter === 'vse' ? 'on' : ''}" data-act="filter" data-v="vse">Vše <span>${open.length}</span></button>
-      <button class="chip ${S.filter === 'gepard' ? 'on' : ''}" data-act="filter" data-v="gepard">${chevrons(3)}Gepard <span>${open.filter((a) => a.priorita === 'gepard').length}</span></button>
-      ${tags.map((t) => `<button class="chip ${S.filter === `tag:${t}` ? 'on' : ''}" data-act="filter" data-v="tag:${h(t)}">${h(t)}</button>`).join('')}
-    </div>` : ''}
-    ${section('late', 'Po termínu', g.late)}
-    ${section('today', 'Dnes', g.today)}
-    ${section('week', 'Tento týden', g.week)}
-    ${section('next', 'Příští týden', g.next)}
-    ${section('later', 'Později', g.later, { collapsible: true })}
-    ${!list.length ? `<div class="empty"><div class="empty-ico">${statusIcon(2)}</div>
-      <b>${open.length ? 'V tomhle filtru nic není.' : 'Nic tě netlačí.'}</b>
-      <p class="muted">${open.length ? '' : 'Všechno, co je teď na řadě, máš hotové.'}</p></div>` : ''}
-    ${hidden ? `<a class="upcoming" href="#kalendar">${icon('cal')}<span><b>${hidden} ${plural(hidden, 'úkol se objeví', 'úkoly se objeví', 'úkolů se objeví')} později</b>
-      <span class="muted">Až přijde jejich čas. Dopředu je uvidíš v Kalendáři.</span></span>${icon('next')}</a>` : ''}
-  `;
+  return `<div class="moje">
+    <div class="moje-side">
+      <div class="hello"><b>${hello}.</b>
+        <span class="muted">${C.fmtWeekday(now, true)} ${now.getDate()}. ${MONTHS_GEN[now.getMonth()]}</span></div>
+      ${todayCard(now)}
+      ${tot ? `<div class="week">
+        <div class="week-t"><span class="eyebrow">Tento týden</span><b>hotovo ${doneW} z ${tot}</b></div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${doneW}"><i style="width:${Math.round(doneW / tot * 100)}%"></i></div>
+      </div>` : ''}
+      ${intro}
+      ${hidden ? `<a class="upcoming" href="#kalendar">${icon('cal')}<span><b>${hidden} ${plural(hidden, 'úkol se objeví', 'úkoly se objeví', 'úkolů se objeví')} později</b>
+        <span class="muted">Až přijde jejich čas. Dopředu je uvidíš v Kalendáři.</span></span>${icon('next')}</a>` : ''}
+    </div>
+    <div class="feed">
+      ${open.length ? `<div class="chips" role="group" aria-label="Filtr">
+        <button class="chip ${S.filter === 'vse' ? 'on' : ''}" data-act="filter" data-v="vse">Vše <span>${open.length}</span></button>
+        <button class="chip ${S.filter === 'gepard' ? 'on' : ''}" data-act="filter" data-v="gepard">${chevrons(3)}Gepard <span>${open.filter((a) => a.priorita === 'gepard').length}</span></button>
+        ${tags.map((t) => `<button class="chip ${S.filter === `tag:${t}` ? 'on' : ''}" data-act="filter" data-v="tag:${h(t)}">${h(t)}</button>`).join('')}
+      </div>` : ''}
+      ${section('late', 'Po termínu', g.late)}
+      ${section('today', 'Dnes', g.today)}
+      ${section('week', 'Tento týden', g.week)}
+      ${section('next', 'Příští týden', g.next)}
+      ${section('later', 'Později', g.later, { collapsible: true })}
+      ${!list.length ? `<div class="empty"><div class="empty-ico">${statusIcon(2)}</div>
+        <b>${open.length ? 'V tomhle filtru nic není.' : 'Nic tě netlačí.'}</b>
+        <p class="muted">${open.length ? '' : 'Všechno, co je teď na řadě, máš hotové.'}</p></div>` : ''}
+    </div>
+  </div>`;
+}
+
+/** Karta „Dnes“: svátek, jmeniny, mezinárodní den a blížící se státní svátek. */
+function todayCard(now) {
+  const info = D.dayInfo(now);
+  const rows = [];
+  if (info.svatek) rows.push(`<div class="td-row td-svatek"><i class="mk st-h"></i><span><b>Dnes je státní svátek</b>${h(info.svatek)}</span></div>`);
+  if (pref.get('showNames', true) && info.jmeniny) rows.push(`<div class="td-row"><i class="mk nm"></i><span>Svátek má <b>${h(info.jmeniny)}</b></span></div>`);
+  if (pref.get('showIntl', true)) for (const d of info.dny) rows.push(`<div class="td-row"><i class="mk dn"></i><span>${h(d)}</span></div>`);
+  for (let i = 1; i <= 10; i++) {
+    const d = C.addDays(C.startOfDay(now), i);
+    const sv = D.stateHolidayOn(d);
+    if (!sv) continue;
+    rows.push(`<div class="td-row td-next"><i class="mk st-h"></i><span><b>${i === 1 ? 'Zítra' : `${C.fmtWeekday(d, true)} ${C.fmtDate(d)}`}</b> státní svátek – volno<small>${h(sv)}</small></span></div>`);
+    break;
+  }
+  if (!rows.length) return '';
+  return `<div class="today">${rows.join('')}</div>`;
 }
 
 function card(a) {
   const due = C.fmtDue(a.termin, a.cas);
-  const chk = a.kontrolni?.length ? `${a.kontrolni.filter((k) => k.done).length}/${a.kontrolni.length}` : '';
+  const total = a.kontrolni?.length || 0;
+  const doneK = total ? a.kontrolni.filter((k) => k.done).length : 0;
   const from = a.zadal && a.zadal !== S.me.email ? `od ${short(a.zadalJmeno || a.zadal)}` : '';
-  const next = C.STATUS[Math.min(2, a.stav + 1)].label;
-  return `<article class="card st-${a.stav} tone-${due.tone || 'x'}">
-    <button class="st" data-act="cycle" data-id="${a.id}" aria-label="Stav: ${C.STATUS[a.stav].label}. Ťukni pro: ${next}">${statusIcon(a.stav)}</button>
-    <button class="card-b" data-act="open" data-id="${a.id}">
+  return `<button class="card st-${a.stav} tone-${due.tone || 'x'}" data-act="open" data-id="${a.id}"
+      aria-label="${h(a.nazev)}, ${C.STATUS[a.stav].label}, termín ${h(due.text)}. Otevřít práci na úkolu.">
+    <span class="st" aria-hidden="true">${statusIcon(a.stav)}</span>
+    <span class="card-b">
       <span class="card-t">${h(a.nazev)}</span>
       <span class="card-m">
         ${priPill(a.priorita)}
         <span class="due due-${due.tone || 'x'}">${h(due.text)}</span>
         ${a.stav === 1 ? '<span class="stlabel">rozpracováno</span>' : ''}
-        ${chk ? `<span class="meta">${chk}</span>` : ''}
+        ${total ? `<span class="meta kprog"><i style="--p:${Math.round(doneK / total * 100)}%"></i>${doneK}/${total}</span>` : ''}
         ${a.typ === 'spolecny' ? `<span class="meta">${icon('people', 'xs')}společný</span>` : ''}
         ${from ? `<span class="meta">${h(from)}</span>` : ''}
         ${(a.stitky || []).slice(0, 2).map((t) => `<span class="tag">${h(t)}</span>`).join('')}
       </span>
-    </button>
-  </article>`;
+    </span>
+    <span class="card-go" aria-hidden="true">${icon('next')}</span>
+  </button>`;
 }
 
 /* ---------- Kalendář ---------- */
@@ -348,9 +396,11 @@ function viewKalendar() {
   const last = new Date(y, m + 1, 1);
   const items = myCalendarItems(first, last);
   const evs = S.events.filter((e) => C.parseYmd(e.do || e.od) >= first && C.parseYmd(e.od) < last);
+  const showIntl = pref.get('showIntl', true);
+  const showNames = pref.get('showNames', true);
 
   const byDay = new Map();
-  const add = (k, x) => { if (!byDay.has(k)) byDay.set(k, { ev: [], ta: [] }); byDay.get(k)[x.kind].push(x.v); };
+  const slot = (k) => { if (!byDay.has(k)) byDay.set(k, { ev: [], ta: [], sv: null, dny: [] }); return byDay.get(k); };
   for (const e of evs) {
     let d = C.parseYmd(e.od); const end = C.parseYmd(e.do || e.od);
     const long = C.diffDays(end, d) > 6; // dlouhé (prázdniny) jen jako podbarvení
@@ -358,11 +408,17 @@ function viewKalendar() {
     while (d <= end) {
       // v mřížce značka každý den (dlouhé prázdniny jen podbarvením), v přehledu jen první den
       const head = d.getTime() === startT || d.getDate() === 1;
-      if (d >= first && d < last && (!long || head)) add(C.ymd(d), { kind: 'ev', v: head ? e : { ...e, cont: true } });
+      if (d >= first && d < last && (!long || head)) slot(C.ymd(d)).ev.push(head ? e : { ...e, cont: true });
       d = C.addDays(d, 1);
     }
   }
-  for (const a of items) add(C.ymd(new Date(a.termin)), { kind: 'ta', v: a });
+  for (const a of items) slot(C.ymd(new Date(a.termin))).ta.push(a);
+  for (let d = 1; d <= C.daysInMonth(y, m); d++) {
+    const date = new Date(y, m, d);
+    const sv = D.stateHolidayOn(date);
+    if (sv) slot(C.ymd(date)).sv = sv;
+    if (showIntl) { const dn = D.intlDaysOn(date); if (dn.length) slot(C.ymd(date)).dny = dn; }
+  }
 
   const offset = C.isoWeekday(first) - 1;
   const cells = [];
@@ -373,39 +429,63 @@ function viewKalendar() {
     const x = byDay.get(k);
     const off = S.hol.has(k);
     const isToday = k === C.ymd(now);
-    const marks = x ? `${x.ev.length ? '<i class="mk sq"></i>' : ''}${x.ta.some((a) => a.stav < 2) ? '<i class="mk ci"></i>' : ''}${x.ta.length && x.ta.every((a) => a.stav === 2) ? '<i class="mk ci done"></i>' : ''}` : '';
-    cells.push(`<button class="cd ${off ? 'off' : ''} ${isToday ? 'today' : ''} ${S.cal.sel === k ? 'sel' : ''} ${C.isoWeekday(date) > 5 ? 'we' : ''}" data-act="cal-day" data-d="${k}" aria-label="${d}. ${m + 1}.${x ? `, ${x.ev.length} akcí, ${x.ta.length} úkolů` : ''}">
-      <span class="dn">${d}</span><span class="mks">${marks}</span></button>`);
+    const marks = x ? `${x.sv ? '<i class="mk st-h"></i>' : ''}${x.ev.length ? '<i class="mk sq"></i>' : ''}${x.ta.some((a) => a.stav < 2) ? '<i class="mk ci"></i>' : ''}${x.ta.length && x.ta.every((a) => a.stav === 2) ? '<i class="mk ci done"></i>' : ''}${x.dny.length ? '<i class="mk dn"></i>' : ''}` : '';
+    // na velké obrazovce se v políčku ukážou i názvy
+    const labels = x ? [
+      ...(x.sv ? [`<span class="cl cl-sv">${h(x.sv)}</span>`] : []),
+      ...x.ev.filter((e) => !e.cont).map((e) => `<span class="cl cl-ev">${h(e.nazev)}</span>`),
+      ...C.sortAssignments(x.ta).map((a) => `<span class="cl cl-ta st-${a.stav}">${h(a.nazev)}</span>`),
+    ] : [];
+    const more = labels.length > 3 ? `<span class="cl cl-more">+${labels.length - 3} další</span>` : '';
+    cells.push(`<button class="cd ${off ? 'off' : ''} ${x?.sv ? 'sv' : ''} ${isToday ? 'today' : ''} ${S.cal.sel === k ? 'sel' : ''} ${C.isoWeekday(date) > 5 ? 'we' : ''}" data-act="cal-day" data-d="${k}" aria-label="${d}. ${m + 1}.${x?.sv ? `, státní svátek` : ''}${x ? `, ${x.ev.length} akcí, ${x.ta.length} úkolů` : ''}">
+      <span class="dn">${d}</span><span class="mks">${marks}</span><span class="cls">${labels.slice(0, 3).join('')}${more}</span></button>`);
   }
 
-  const days = [...byDay.keys()].sort().filter((k) => (!S.cal.sel || k === S.cal.sel) && (S.cal.sel || byDay.get(k).ta.length || byDay.get(k).ev.some((e) => !e.cont)));
+  const sel = S.cal.sel;
+  const days = [...byDay.keys()].sort().filter((k) => {
+    if (sel) return k === sel;
+    const x = byDay.get(k);
+    return x.ta.length || x.sv || x.ev.some((e) => !e.cont) || x.dny.length;
+  });
+  if (sel && !days.includes(sel)) days.push(sel);
   const agenda = days.map((k) => {
     const d = C.parseYmd(k);
-    const x = byDay.get(k);
+    const x = byDay.get(k) || { ev: [], ta: [], sv: null, dny: [] };
+    const jm = showNames && sel ? D.namedayOn(d) : null;
     return `<div class="ag-day ${k === C.ymd(now) ? 'is-today' : ''}">
       <div class="ag-d"><b>${d.getDate()}.</b><span>${C.fmtWeekday(d)}</span></div>
       <div class="ag-items">
-        ${x.ev.filter((e) => !e.cont || S.cal.sel).map((e) => `<div class="ag-ev ev-${e.typ}"><i class="mk sq"></i><span>${h(e.nazev)}${e.cas ? ` <span class="muted">– ${h(e.cas)}</span>` : ''}${e.od !== e.do ? ` <span class="muted">(${C.fmtDate(C.parseYmd(e.od))}–${C.fmtDate(C.parseYmd(e.do))})</span>` : ''}</span></div>`).join('')}
-        ${C.sortAssignments(x.ta).map((a) => `<button class="ag-ta st-${a.stav}" ${a.virtual ? '' : `data-act="open" data-id="${a.id}"`}>
+        ${x.sv ? `<div class="ag-ev ev-svatek"><i class="mk st-h"></i><span>${h(x.sv)} <span class="muted">– státní svátek</span></span></div>` : ''}
+        ${x.ev.filter((e) => !e.cont || sel).map((e) => `<div class="ag-ev ev-${e.typ}"><i class="mk sq"></i><span>${h(e.nazev)}${e.cas ? ` <span class="muted">– ${h(e.cas)}</span>` : ''}${e.od !== e.do ? ` <span class="muted">(${C.fmtDate(C.parseYmd(e.od))}–${C.fmtDate(C.parseYmd(e.do))})</span>` : ''}</span></div>`).join('')}
+        ${C.sortAssignments(x.ta).map((a) => `<button class="ag-ta st-${a.stav}" ${a.virtual ? 'disabled' : `data-act="open" data-id="${a.id}"`}>
           <span class="st sm">${statusIcon(a.stav)}</span><span class="ag-t">${h(a.nazev)}
           <span class="card-m">${priPill(a.priorita)}${a.cas ? `<span class="meta">${a.cas}</span>` : ''}${new Date(a.zobrazitOd) > now && a.stav < 2 ? `<span class="meta">${icon('bell', 'xs')}objeví se ${C.fmtDate(new Date(a.zobrazitOd))}</span>` : ''}</span></span></button>`).join('')}
+        ${x.dny.map((n) => `<div class="ag-dn"><i class="mk dn"></i><span>${h(n)}</span></div>`).join('')}
+        ${jm ? `<div class="ag-dn"><i class="mk nm"></i><span>Svátek má ${h(jm)}</span></div>` : ''}
+        ${sel && !x.ta.length && !x.ev.length && !x.sv && !x.dny.length && !jm ? '<div class="muted small">Nic naplánovaného.</div>' : ''}
       </div></div>`;
   }).join('');
 
-  return `
-    <div class="cal-head">
-      <button class="iconbtn" data-act="cal-prev" aria-label="Předchozí měsíc">${icon('back')}</button>
-      <h2>${C.MONTHS[m]} ${y}</h2>
-      <button class="iconbtn" data-act="cal-next" aria-label="Další měsíc">${icon('next')}</button>
+  return `<div class="calwrap">
+    <div class="cal-main">
+      <div class="cal-head">
+        <button class="iconbtn" data-act="cal-prev" aria-label="Předchozí měsíc">${icon('back')}</button>
+        <h2>${C.MONTHS[m]} ${y}</h2>
+        <button class="iconbtn" data-act="cal-next" aria-label="Další měsíc">${icon('next')}</button>
+      </div>
+      <div class="cal">
+        ${['po', 'út', 'st', 'čt', 'pá', 'so', 'ne'].map((d) => `<span class="cw">${d}</span>`).join('')}
+        ${cells.join('')}
+      </div>
+      <div class="legend"><span><i class="mk ci"></i>můj úkol</span><span><i class="mk ci done"></i>hotovo</span><span><i class="mk sq"></i>akce školy</span><span><i class="mk st-h"></i>státní svátek</span>${showIntl ? '<span><i class="mk dn"></i>mezinárodní den</span>' : ''}<span><i class="lg-off"></i>volno</span></div>
+      ${(y !== now.getFullYear() || m !== now.getMonth()) ? '<button class="btn small" data-act="cal-today">Zpět na dnešek</button>' : ''}
     </div>
-    <div class="cal">
-      ${['po', 'út', 'st', 'čt', 'pá', 'so', 'ne'].map((d) => `<span class="cw">${d}</span>`).join('')}
-      ${cells.join('')}
+    <div class="cal-side">
+      <div class="ag-head"><h3>${sel ? `${C.fmtWeekday(C.parseYmd(sel), true)} ${C.fmtDate(C.parseYmd(sel), true)}` : `Celý ${C.MONTHS[m]}`}</h3>
+        ${sel ? '<button class="linkbtn" data-act="cal-all">Celý měsíc</button>' : ''}</div>
+      <div class="agenda">${agenda || '<div class="empty"><b>Tento měsíc nic.</b></div>'}</div>
     </div>
-    <div class="legend"><span><i class="mk sq"></i>akce školy</span><span><i class="mk ci"></i>můj úkol</span><span><i class="mk ci done"></i>hotovo</span><span><i class="lg-off"></i>volno</span></div>
-    ${S.cal.sel ? `<button class="linkbtn" data-act="cal-all">Ukázat celý měsíc</button>` : ''}
-    <div class="agenda">${agenda || '<div class="empty"><b>Tento měsíc nic.</b></div>'}</div>
-    ${(y !== now.getFullYear() || m !== now.getMonth()) ? '<button class="btn small center" data-act="cal-today">Zpět na dnešek</button>' : ''}`;
+  </div>`;
 }
 
 /* ---------- Zadané ---------- */
@@ -443,7 +523,7 @@ function viewZadane() {
       <button class="${S.zadaneMode === 'plosne' ? 'on' : ''}" data-act="zad-mode" data-v="plosne">Všechny plošné</button>
     </div>` : ''}
     <p class="muted lead">Úkoly, které jsi dal(a) kolegům. Uvidíš, kdo má hotovo a komu připomenout.</p>
-    ${active.map((g) => {
+    <div class="cards">${active.map((g) => {
       const done = g.items.filter((a) => a.stav === 2).length;
       const doing = g.items.filter((a) => a.stav === 1).length;
       const due = C.fmtDue(g.termin, g.cas);
@@ -457,7 +537,7 @@ function viewZadane() {
         <span class="zprog"><span class="bar"><i style="width:${pct}%"></i><i class="doing" style="width:${Math.round(doing / g.items.length * 100)}%"></i></span>
           <b>${done}/${g.items.length}</b></span>
       </button>`;
-    }).join('') || `<div class="empty"><b>Zatím jsi nikomu nic nezadal(a).</b><p class="muted">Ťukni na plus a vyber „Pro kolegu“.</p></div>`}
+    }).join('')}</div>${active.length ? '' : `<div class="empty"><b>Zatím jsi nikomu nic nezadal(a).</b><p class="muted">Ťukni na Nový a vyber „Pro kolegu“.</p></div>`}
     ${old ? `<p class="muted small center">${old} starších dokončených zadání je schováno.</p>` : ''}`;
 }
 
@@ -477,12 +557,12 @@ function viewHotove() {
   return `
     <label class="search">${icon('search')}<input type="search" placeholder="Hledat v hotových…" value="${h(S.search)}" data-act="search" aria-label="Hledat v hotových"></label>
     ${[...byMonth].map(([k, list]) => `<section class="sec"><h2 class="sec-h">${k}<span class="cnt">${list.length}</span></h2>
-      ${list.map((a) => `<article class="card st-2">
-        <span class="st">${statusIcon(2)}</span>
-        <button class="card-b" data-act="open" data-id="${a.id}"><span class="card-t">${h(a.nazev)}</span>
-          <span class="card-m"><span class="meta">hotovo ${a.hotovo ? C.fmtDate(new Date(a.hotovo)) : ''}</span>${priPill(a.priorita)}${(a.stitky || []).map((t) => `<span class="tag">${h(t)}</span>`).join('')}</span></button>
+      <div class="cards">${list.map((a) => `<div class="card card-done st-2">
+        <button class="card-open" data-act="open" data-id="${a.id}"><span class="st" aria-hidden="true">${statusIcon(2)}</span>
+          <span class="card-b"><span class="card-t">${h(a.nazev)}</span>
+          <span class="card-m"><span class="meta">hotovo ${a.hotovo ? C.fmtDate(new Date(a.hotovo)) : ''}</span>${priPill(a.priorita)}${(a.stitky || []).map((t) => `<span class="tag">${h(t)}</span>`).join('')}</span></span></button>
         <button class="linkbtn" data-act="reopen" data-id="${a.id}">Vrátit</button>
-      </article>`).join('')}</section>`).join('') || `<div class="empty"><b>${q ? 'Nic nenalezeno.' : 'Tady se budou schovávat hotové úkoly.'}</b></div>`}`;
+      </div>`).join('')}</div></section>`).join('') || `<div class="empty"><b>${q ? 'Nic nenalezeno.' : 'Tady se budou schovávat hotové úkoly.'}</b></div>`}`;
 }
 
 /* ---------- Nastavení ---------- */
@@ -492,7 +572,7 @@ function viewNastaveni() {
   const theme = pref.get('theme', 'auto');
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches;
-  return `
+  return `<div class="panels">
     <section class="panel">
       <div class="me"><span class="avatar big">${h(initials(S.me.jmeno))}</span><div><b>${h(S.me.jmeno)}</b><div class="muted small">${h(S.me.email)}</div><div class="tags">${roles}</div></div></div>
     </section>
@@ -510,6 +590,12 @@ function viewNastaveni() {
       <button class="btn" data-act="ics-all">${icon('dl')}Stáhnout moje termíny do kalendáře (.ics)</button>
     </section>
     <section class="panel">
+      <h3 class="eyebrow">Svátky a významné dny</h3>
+      <p class="small muted">Státní svátky se ukazují vždy – jsou to volné dny. Appka si je spočítá sama pro každý rok.</p>
+      <label class="switch"><input type="checkbox" data-act="pref-names" ${pref.get('showNames', true) ? 'checked' : ''}><span>Ukazovat, kdo má svátek (jmeniny)</span></label>
+      <label class="switch"><input type="checkbox" data-act="pref-intl" ${pref.get('showIntl', true) ? 'checked' : ''}><span>Ukazovat mezinárodní dny<small class="muted">Třeba Den učitelů, Mezinárodní den matematiky nebo Den Země.</small></span></label>
+    </section>
+    <section class="panel">
       <h3 class="eyebrow">Vzhled</h3>
       <div class="seg">${[['auto', 'Podle telefonu'], ['light', 'Světlý'], ['dark', 'Tmavý']].map(([v, l]) => `<button class="${theme === v ? 'on' : ''}" data-act="theme" data-v="${v}">${l}</button>`).join('')}</div>
     </section>
@@ -522,20 +608,20 @@ function viewNastaveni() {
     <section class="panel help">
       <h3 class="eyebrow">Jak to funguje</h3>
       <dl>
-        <dt>${priPill('gepard')}</dt><dd>Hoří. Udělej co nejdřív.</dd>
-        <dt>${priPill('zajic')}</dt><dd>Brzy. Tento nebo příští týden.</dd>
-        <dt>${priPill('snek')}</dt><dd>Počká. Hlavně nezapomenout.</dd>
+        <dt>${priPill('gepard')}</dt><dd>Do zítřka.</dd>
+        <dt>${priPill('zajic')}</dt><dd>Do konce týdne.</dd>
+        <dt>${priPill('snek')}</dt><dd>Do konce měsíce.</dd>
         <dt><span class="st sm st-0 inl">${statusIcon(0)}</span></dt><dd>Nezačato</dd>
         <dt><span class="st sm st-1 inl">${statusIcon(1)}</span></dt><dd>Rozpracováno</dd>
         <dt><span class="st sm st-2 inl">${statusIcon(2)}</span></dt><dd>Hotovo – schová se do Hotových</dd>
       </dl>
-      <p class="small muted">Úkoly se ti ukážou, až přijde jejich čas – třeba výkaz až poslední týden v měsíci. Dopředu je najdeš v Kalendáři.</p>
+      <p class="small muted">Stav úkolu měníš v Práci na úkolu – ťukni na úkol. Úkoly se ti ukážou, až přijde jejich čas, třeba výkaz až poslední týden v měsíci. Dopředu je najdeš v Kalendáři.</p>
       <button class="linkbtn" data-act="intro-again">Znovu ukázat úvodní nápovědu</button>
     </section>
     <section class="panel">
       ${S.store.logout ? '<button class="btn" data-act="logout">Odhlásit</button>' : ''}
       <p class="muted small">Úkolníček ${VERSION}${S.store.mode === 'demo' ? ' – ukázkový režim' : ''}</p>
-    </section>`;
+    </section></div>`;
 }
 
 /* ---------- Správa ---------- */
@@ -543,7 +629,7 @@ function viewNastaveni() {
 function viewSprava() {
   const tabs = [['lide', 'Lidé a role'], ['import', 'Import'], ['napojeni', 'Napojení'], ['zaloha', 'Záloha']];
   const body = { lide: adminLide, import: adminImport, napojeni: adminNapojeni, zaloha: adminZaloha }[S.admin]();
-  return `<div class="seg scroll" role="tablist">${tabs.map(([k, l]) => `<button class="${S.admin === k ? 'on' : ''}" data-act="admin-tab" data-v="${k}">${l}</button>`).join('')}</div>${body}`;
+  return `<div class="seg scroll admin-tabs" role="tablist">${tabs.map(([k, l]) => `<button class="${S.admin === k ? 'on' : ''}" data-act="admin-tab" data-v="${k}">${l}</button>`).join('')}</div><div class="admin admin-${S.admin}">${body}</div>`;
 }
 
 function adminLide() {
@@ -679,31 +765,98 @@ function closeSheet() { document.querySelectorAll('dialog.sheet').forEach((d) =>
 const sheetHead = (title, eyebrow = '') => `<div class="sh-head"><div>${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h2>${h(title)}</h2></div>
   <button class="iconbtn" data-act="close" aria-label="Zavřít">${icon('close')}</button></div>`;
 
-function openDetail(id) {
-  const a = S.mine.find((x) => x.id === id);
-  if (!a) return;
+const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9.5"/></svg>';
+
+function canEditTask(t) { return !!t && (t.zadal === S.me.email || S.me.roles.has('spravce')); }
+
+function detailHtml(a) {
   const t = S.tasks.find((x) => x.id === a.ukolId);
   const due = C.fmtDue(a.termin, a.cas);
-  const canEdit = t && (t.zadal === S.me.email || S.me.roles.has('spravce'));
+  const d = new Date(a.termin);
+  const canEdit = canEditTask(t);
+  const steps = a.kontrolni || [];
+  const doneK = steps.filter((k) => k.done).length;
   const others = a.typ === 'spolecny' ? (t?.cile?.lide || []).filter((e) => e !== S.me.email).map((e) => S.people.find((p) => p.email === e)?.jmeno || e) : [];
-  sheet(`
-    ${sheetHead(a.nazev, `${C.TYPES[a.typ] || ''}${a.zadal !== S.me.email ? ` – zadal(a) ${h(a.zadalJmeno)}` : ''}`)}
-    <div class="d-meta">${priPill(a.priorita)}<span class="due due-${due.tone || 'x'}">${h(due.text)}</span>${(a.stitky || []).map((s) => `<span class="tag">${h(s)}</span>`).join('')}</div>
-    <div class="stseg" role="radiogroup" aria-label="Stav úkolu">
-      ${C.STATUS.map((s) => `<button role="radio" aria-checked="${a.stav === s.key}" class="sts st-${s.key} ${a.stav === s.key ? 'on' : ''}" data-act="set-status" data-id="${a.id}" data-v="${s.key}">
-        <span class="st">${statusIcon(s.key)}</span>${s.label}</button>`).join('')}
-    </div>
-    ${a.popis ? `<p class="d-popis">${h(a.popis).replace(/\n/g, '<br>')}</p>` : ''}
-    ${t?.plan ? `<div class="say"><span class="eyebrow">Můj plán</span>${h(t.plan)}</div>` : ''}
-    ${a.kontrolni?.length ? `<div class="checklist"><div class="eyebrow">Kroky – ${a.kontrolni.filter((k) => k.done).length} z ${a.kontrolni.length}</div>
-      ${a.kontrolni.map((k, i) => `<label class="ck"><input type="checkbox" data-act="check" data-id="${a.id}" data-i="${i}" ${k.done ? 'checked' : ''}><span>${h(k.t)}</span></label>`).join('')}</div>` : ''}
-    ${others.length ? `<p class="small"><span class="eyebrow">Spolu s</span><br>${others.map(h).join(', ')}</p>` : ''}
-    <label class="field"><span class="eyebrow">Poznámka pro mě</span><textarea rows="2" data-act="note" data-id="${a.id}" placeholder="Co je potřeba si pamatovat…">${h(a.poznamka)}</textarea></label>
-    <div class="row-actions">
+  const zobr = new Date(a.zobrazitOd);
+  const info = [
+    ['Termín', `${C.fmtWeekday(d, true)} ${C.fmtDate(d, true)}${a.cas ? ` v ${a.cas}` : ''}`],
+    [zobr > new Date() ? 'Objeví se' : 'Objevil se', `${C.fmtWeekday(zobr)} ${C.fmtDate(zobr, true)}`],
+    ...(t?.opakovani ? [['Opakuje se', C.REPEAT[t.opakovani]]] : []),
+    ['Zadal(a)', a.zadal === S.me.email ? 'já' : h(a.zadalJmeno || a.zadal)],
+    ['Pro koho', a.typ === 'plosny' ? h((t?.cile?.role || []).map((r) => C.TARGETS[r]).join(', ') || C.TYPES.plosny) : h(C.TYPES[a.typ] || '')],
+    ...(others.length ? [['Spolu s', others.map(h).join(', ')]] : []),
+    ...(t?.zdroj && !['Ručně', 'Ukázka'].includes(t.zdroj) ? [['Zdroj', h(t.zdroj)]] : []),
+  ];
+  const today = C.startOfDay(new Date());
+  const shifts = canEdit && !t.opakovani ? [
+    ['Zítra', C.suggestDue('gepard', today, S.hol)],
+    ['Konec týdne', C.suggestDue('zajic', today, S.hol)],
+    ['Za týden', C.addDays(today, 7)],
+    ['Konec měsíce', C.suggestDue('snek', today, S.hol)],
+  ].filter(([, dd], i, arr) => arr.findIndex(([, x]) => C.ymd(x) === C.ymd(dd)) === i) : [];
+
+  return `
+    ${sheetHead(a.nazev, 'Práce na úkolu')}
+    <div class="d-meta">${priPill(a.priorita)}<span class="due due-${due.tone || 'x'}">${h(due.text)}</span>${(a.stitky || []).map((x) => `<span class="tag">${h(x)}</span>`).join('')}</div>
+
+    <section class="d-sec">
+      <div class="d-h"><span class="eyebrow">Stav</span></div>
+      <div class="stseg" role="radiogroup" aria-label="Stav úkolu">
+        ${C.STATUS.map((st) => `<button role="radio" aria-checked="${a.stav === st.key}" class="sts st-${st.key} ${a.stav === st.key ? 'on' : ''}" data-act="set-status" data-id="${a.id}" data-v="${st.key}">
+          <span class="st">${statusIcon(st.key)}</span>${st.label}</button>`).join('')}
+      </div>
+    </section>
+
+    ${a.popis ? `<section class="d-sec"><div class="d-h"><span class="eyebrow">Co a jak</span></div><p class="d-popis">${h(a.popis).replace(/\n/g, '<br>')}</p></section>` : ''}
+
+    <section class="d-sec">
+      <div class="d-h"><span class="eyebrow">Kroky</span>${steps.length ? `<b class="d-count">${doneK} z ${steps.length}</b>` : ''}</div>
+      ${steps.length ? `<div class="bar thin"><i style="width:${Math.round(doneK / steps.length * 100)}%"></i></div>` : '<p class="small muted">Rozděl si úkol na menší kroky – odškrtávání malých kroků pomáhá to dotáhnout.</p>'}
+      <ul class="steps">${steps.map((k, i) => `<li class="${k.done ? 'done' : ''}">
+        <button class="step" role="checkbox" aria-checked="${!!k.done}" data-act="check" data-id="${a.id}" data-i="${i}">
+          <span class="box">${k.done ? CHECK_SVG : ''}</span><span class="tx">${h(k.t)}</span></button>
+        ${k.own || canEdit ? `<button class="iconbtn sm" data-act="rm-step" data-id="${a.id}" data-i="${i}" aria-label="Odebrat krok ${h(k.t)}">${icon('close')}</button>` : ''}
+      </li>`).join('')}</ul>
+      <form class="addstep" data-act="add-step" data-id="${a.id}">
+        <input type="text" name="krok" placeholder="Přidat krok…" aria-label="Nový krok" autocomplete="off" maxlength="160">
+        <button class="btn small" type="submit">${icon('plus')}Přidat</button>
+      </form>
+    </section>
+
+    ${t && (t.plan || (canEdit && a.typ === 'osobni')) ? `<section class="d-sec"><div class="d-h"><span class="eyebrow">Kdy a kde na tom budu pracovat</span></div>
+      ${canEdit && a.typ === 'osobni'
+        ? `<input type="text" data-act="plan" data-id="${t.id}" value="${h(t.plan)}" placeholder="Např. v úterý po 6. hodině v kabinetu">`
+        : `<div class="say">${h(t.plan)}</div>`}</section>` : ''}
+
+    <section class="d-sec"><label class="field"><span class="eyebrow">Poznámka pro mě</span>
+      <textarea rows="2" data-act="note" data-id="${a.id}" placeholder="Co je potřeba si pamatovat…">${h(a.poznamka)}</textarea></label></section>
+
+    <dl class="d-info">${info.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+
+    ${shifts.length ? `<section class="d-sec"><div class="d-h"><span class="eyebrow">Posunout termín</span></div>
+      <div class="chips wrapchips">${shifts.map(([l, dd]) => `<button class="chip" data-act="shift" data-id="${t.id}" data-v="${C.ymd(dd)}">${l} <span>${C.fmtWeekday(dd)} ${C.fmtDate(dd)}</span></button>`).join('')}</div></section>` : ''}
+
+    <div class="row-actions d-actions">
       <button class="btn ghost" data-act="ics-one" data-id="${a.id}">${icon('cal')}Do kalendáře</button>
       ${canEdit ? `<button class="btn ghost" data-act="edit-task" data-id="${t.id}">${icon('edit')}Upravit</button>
         <button class="btn ghost danger" data-act="delete-task" data-id="${t.id}">${icon('trash')}Smazat</button>` : ''}
-    </div>`);
+    </div>`;
+}
+
+/** Otevře Práci na úkolu; když už je otevřená, jen ji překreslí (bez blikání a skoku). */
+function openDetail(id) {
+  const a = S.mine.find((x) => x.id === id);
+  if (!a) return;
+  const open = document.querySelector('dialog.sheet.detail');
+  if (open && open.dataset.id === id) {
+    const box = open.querySelector('.sheet-in');
+    const y = box.scrollTop;
+    box.innerHTML = detailHtml(a);
+    box.scrollTop = y;
+    return;
+  }
+  const d = sheet(detailHtml(a), 'detail');
+  d.dataset.id = id;
 }
 
 function openZadaneDetail(k) {
@@ -737,12 +890,13 @@ function openForm(task) {
   const today = new Date();
   const editing = !!task;
   F = task ? structuredClone(task) : {
-    nazev: '', popis: '', termin: C.ymd(C.addDays(today, 1)), cas: '', priorita: 'zajic', typ: 'osobni', cile: { role: [], lide: [] },
+    nazev: '', popis: '', termin: C.ymd(C.suggestDue('zajic', today, S.hol)), cas: '', priorita: 'zajic', typ: 'osobni', cile: { role: [], lide: [] },
     stitky: [], zobrazitDni: null, opakovani: '', kontrolni: [], plan: '', outlook: true, aktivni: true,
   };
   F.cile = { role: [], lide: [], ...(F.cile || {}) };
   F._show = task && ['1', '3', '7', '14', '30'].includes(String(task.zobrazitDni)) ? String(task.zobrazitDni) : 'hned';
   F._editing = editing;
+  F._dateTouched = editing;
   F._q = '';
   drawForm();
 }
@@ -792,16 +946,17 @@ function formHtml() {
           <p class="small muted">Dostane ${recCount} ${plural(recCount, 'člověk', 'lidé', 'lidí')}. Každý má svůj úkol a ty uvidíš, kdo má hotovo.</p>` : ''}
       </div>
 
+      <div class="field"><span class="eyebrow">Jak moc to spěchá</span>
+        <div class="prigrid">${C.PRIORITY_ORDER.slice().reverse().map((k) => { const sd = C.suggestDue(k, today, S.hol); return `<button type="button" class="prib prib-${k} ${F.priorita === k ? 'on' : ''}" data-act="f-pri" data-v="${k}" aria-pressed="${F.priorita === k}">
+          ${chevrons(C.PRIORITY[k].n)}<b>${C.PRIORITY[k].label}</b><small>${C.PRIORITY[k].hint}</small><small class="sd">${C.fmtWeekday(sd)} ${C.fmtDate(sd)}</small></button>`; }).join('')}</div>
+        <p class="small muted">Rychlost ti navrhne termín. Datum můžeš níž upravit.</p>
+      </div>
+
       <div class="field"><span class="eyebrow">Do kdy</span>
         <div class="chips">${quick.map(([l, n]) => `<button type="button" class="chip ${F.termin === C.ymd(C.addDays(today, n)) ? 'on' : ''}" data-act="f-date" data-v="${C.ymd(C.addDays(today, n))}">${l}</button>`).join('')}</div>
         <div class="two"><input type="date" data-f="termin" value="${h(F.termin)}" aria-label="Datum termínu">
           <input type="time" data-f="cas" value="${h(F.cas)}" aria-label="Čas (nepovinný)"></div>
         ${F.termin ? `<p class="small muted">${C.fmtWeekday(C.parseYmd(F.termin), true)} ${C.fmtDate(C.parseYmd(F.termin), true)}${F.cas ? ` v ${F.cas}` : ' – čas nemusíš vyplňovat'}</p>` : ''}
-      </div>
-
-      <div class="field"><span class="eyebrow">Jak moc to spěchá</span>
-        <div class="prigrid">${C.PRIORITY_ORDER.map((k) => `<button type="button" class="prib pri-${k} ${F.priorita === k ? 'on' : ''}" data-act="f-pri" data-v="${k}" aria-pressed="${F.priorita === k}">
-          ${chevrons(C.PRIORITY[k].n)}<b>${C.PRIORITY[k].label}</b><small>${C.PRIORITY[k].hint}</small></button>`).join('')}</div>
       </div>
 
       <details class="more" ${F._editing || F.popis || F.opakovani || F.kontrolni?.length ? 'open' : ''}>
@@ -889,7 +1044,7 @@ async function setStatus(id, stav, { undo = true } = {}) {
   for (const t of targets) { const m = S.mine.find((x) => x.id === t.id); if (m) Object.assign(m, patch); }
   Object.assign(a, patch);
   render();
-  if (document.querySelector('dialog.sheet') && !document.querySelector('dialog.form')) openDetail(id);
+  if (document.querySelector('dialog.sheet.detail')) openDetail(id);
   if (stav === 2) {
     closeSheet();
     const left = visibleOpen().filter((x) => new Date(x.termin) < C.addDays(C.startOfWeek(new Date()), 7)).length;
@@ -902,24 +1057,100 @@ async function setStatus(id, stav, { undo = true } = {}) {
   } catch (e) { showError(e); }
 }
 
-async function cycle(id) {
-  const a = S.mine.find((x) => x.id === id);
-  if (!a) return;
-  await setStatus(id, Math.min(2, a.stav + 1));
+
+
+async function sharedTargets(a) {
+  if (a.typ !== 'spolecny') return [a];
+  return (await S.store.assignments({ ukolId: a.ukolId })).filter((x) => x.vyskyt === a.vyskyt);
 }
 
-async function toggleCheck(id, i, done) {
+async function toggleCheck(id, i) {
   const a = S.mine.find((x) => x.id === id);
-  if (!a) return;
+  if (!a || !a.kontrolni[i]) return;
+  const done = !a.kontrolni[i].done;
   a.kontrolni[i].done = done;
-  let targets = [a];
-  if (a.typ === 'spolecny') targets = (await S.store.assignments({ ukolId: a.ukolId })).filter((x) => x.vyskyt === a.vyskyt);
   const patch = { kontrolni: a.kontrolni };
   if (a.stav === 0 && done) { patch.stav = 1; a.stav = 1; }
-  await S.store.updateAssignments(targets.map((t) => ({ id: t.id, patch })));
   render();
   openDetail(id);
-  if (a.kontrolni.every((k) => k.done) && a.stav < 2) toast('Všechny kroky hotové. Označit celý úkol?', { action: 'Hotovo', onAction: () => setStatus(id, 2) });
+  try {
+    const targets = await sharedTargets(a);
+    await S.store.updateAssignments(targets.map((t) => ({ id: t.id, patch })));
+  } catch (e) { showError(e); }
+  if (done && a.kontrolni.every((k) => k.done) && a.stav < 2) toast('Všechny kroky máš hotové. Označit celý úkol?', { action: 'Hotovo', onAction: () => setStatus(id, 2) });
+}
+
+/** Přidání kroku: zadavatel mění zadání (dostanou ho všichni), ostatní si přidají vlastní krok. */
+async function addStep(id, text) {
+  const a = S.mine.find((x) => x.id === id);
+  text = (text || '').trim();
+  if (!a || !text) return;
+  const t = S.tasks.find((x) => x.id === a.ukolId);
+  busy(1);
+  try {
+    if (canEditTask(t)) {
+      const saved = await S.store.saveTask({ ...t, kontrolni: [...(t.kontrolni || []), text] });
+      Object.assign(t, saved);
+      await materialize({ taskIds: new Set([t.id]) });
+      await reloadMine();
+    } else {
+      a.kontrolni = [...(a.kontrolni || []), { t: text, done: false, own: true }];
+      const targets = await sharedTargets(a);
+      await S.store.updateAssignments(targets.map((x) => ({ id: x.id, patch: { kontrolni: a.kontrolni } })));
+    }
+    render();
+    openDetail(id);
+    document.querySelector('dialog.detail .addstep input')?.focus();
+  } catch (e) { showError(e); } finally { busy(-1); }
+}
+
+async function removeStep(id, i) {
+  const a = S.mine.find((x) => x.id === id);
+  if (!a || !a.kontrolni[i]) return;
+  const step = a.kontrolni[i];
+  const t = S.tasks.find((x) => x.id === a.ukolId);
+  busy(1);
+  try {
+    if (!step.own && canEditTask(t)) {
+      const idx = (t.kontrolni || []).indexOf(step.t);
+      const k = [...(t.kontrolni || [])];
+      if (idx >= 0) k.splice(idx, 1);
+      Object.assign(t, await S.store.saveTask({ ...t, kontrolni: k }));
+      await materialize({ taskIds: new Set([t.id]) });
+      await reloadMine();
+    } else if (step.own) {
+      a.kontrolni = a.kontrolni.filter((_, j) => j !== i);
+      const targets = await sharedTargets(a);
+      await S.store.updateAssignments(targets.map((x) => ({ id: x.id, patch: { kontrolni: a.kontrolni } })));
+    }
+    render();
+    openDetail(id);
+  } catch (e) { showError(e); } finally { busy(-1); }
+}
+
+async function shiftTask(taskId, ymdStr, fromAsgId) {
+  const t = S.tasks.find((x) => x.id === taskId);
+  if (!t) return;
+  busy(1);
+  try {
+    const due = C.dueDate(ymdStr, t.cas);
+    const zobrazitDni = Math.max(0, C.diffDays(due, new Date()));
+    Object.assign(t, await S.store.saveTask({ ...t, termin: ymdStr, zobrazitDni: Math.max(t.zobrazitDni || 0, zobrazitDni) }));
+    await materialize({ taskIds: new Set([t.id]) });
+    await reloadMine();
+    render();
+    const a = S.mine.find((x) => x.ukolId === t.id);
+    if (a) openDetail(a.id); else if (fromAsgId) closeSheet();
+    const d = C.parseYmd(ymdStr);
+    toast(`Termín posunut na ${C.fmtWeekday(d)} ${C.fmtDate(d)}.`);
+    syncOutlookSoon();
+  } catch (e) { showError(e); } finally { busy(-1); }
+}
+
+async function savePlan(taskId, plan) {
+  const t = S.tasks.find((x) => x.id === taskId);
+  if (!t || t.plan === plan) return;
+  try { Object.assign(t, await S.store.saveTask({ ...t, plan })); toast('Plán uložen.'); } catch (e) { showError(e); }
 }
 
 async function deleteTask(id) {
@@ -974,7 +1205,7 @@ async function importGo() {
       const fresh = items.filter((e) => !known.has(`${e.nazev}|${e.od}`));
       await S.store.addEvents(fresh);
       S.events = await S.store.events();
-      S.hol = C.holidaySet(S.events);
+      S.hol = holidays(S.events);
       toast(`Nahráno ${fresh.length} akcí${items.length - fresh.length ? `, ${items.length - fresh.length} už tam bylo` : ''}.`);
     } else {
       const known = new Set(S.tasks.map((t) => `${t.nazev}|${t.termin}`));
@@ -1079,7 +1310,7 @@ document.addEventListener('click', async (e) => {
   const act = el.dataset.act;
   const id = el.dataset.id;
   const v = el.dataset.v;
-  const fieldActs = ['check', 'note', 'search', 'pref-outlook', 'f-role', 'pv-toggle', 'import-file'];
+  const fieldActs = ['note', 'plan', 'search', 'pref-outlook', 'pref-names', 'pref-intl', 'f-role', 'pv-toggle', 'import-file'];
   if (fieldActs.includes(act)) return;
   switch (act) {
     case 'login': return S.store.login();
@@ -1088,7 +1319,9 @@ document.addEventListener('click', async (e) => {
     case 'dismiss-error': S.error = ''; return render();
     case 'new': return openForm(null);
     case 'close': return closeSheet();
-    case 'cycle': return cycle(id);
+    case 'check': return toggleCheck(id, +el.dataset.i);
+    case 'rm-step': return removeStep(id, +el.dataset.i);
+    case 'shift': return shiftTask(id, v, document.querySelector('dialog.detail')?.dataset.id);
     case 'open': return openDetail(id);
     case 'set-status': return setStatus(id, +v);
     case 'filter': S.filter = v; return render();
@@ -1143,8 +1376,8 @@ document.addEventListener('click', async (e) => {
     case 'f-typ': collectForm(); F.typ = v; if (v === 'plosny' && !F.cile.role.length) F.cile.role = []; return drawForm();
     case 'f-pick': collectForm(); F.cile.lide = [...new Set([...(F.cile.lide || []), v])]; F._q = ''; return drawForm();
     case 'f-unpick': collectForm(); F.cile.lide = (F.cile.lide || []).filter((x) => x !== v); return drawForm();
-    case 'f-date': collectForm(); F.termin = v; return drawForm();
-    case 'f-pri': collectForm(); F.priorita = v; return drawForm();
+    case 'f-date': collectForm(); F.termin = v; F._dateTouched = true; return drawForm();
+    case 'f-pri': collectForm(); F.priorita = v; if (!F._dateTouched) F.termin = C.ymd(C.suggestDue(v, new Date(), S.hol)); return drawForm();
     case 'f-tag': collectForm(); F.stitky = [...new Set([...(F.stitky || []), v])]; return drawForm();
     default:
   }
@@ -1157,10 +1390,13 @@ document.addEventListener('change', async (e) => {
   const act = el.dataset.act;
   if (el.dataset.f && document.querySelector('dialog.form')) {
     readFormField(el);
+    if (el.dataset.f === 'termin') F._dateTouched = true;
     if (['opakovani', 'termin', '_show'].includes(el.dataset.f)) drawForm();
     return;
   }
-  if (act === 'check') return toggleCheck(el.dataset.id, +el.dataset.i, el.checked);
+  if (act === 'plan') return savePlan(el.dataset.id, el.value.trim());
+  if (act === 'pref-names') { pref.set('showNames', el.checked); return; }
+  if (act === 'pref-intl') { pref.set('showIntl', el.checked); return; }
   if (act === 'note') {
     const a = S.mine.find((x) => x.id === el.dataset.id);
     if (a && a.poznamka !== el.value) { a.poznamka = el.value; try { await S.store.updateAssignments([{ id: a.id, patch: { poznamka: a.poznamka } }]); toast('Poznámka uložena.'); } catch (er) { showError(er); } }
@@ -1188,6 +1424,7 @@ document.addEventListener('submit', (e) => {
   const f = e.target;
   if (f.dataset.act === 'form-submit') { e.preventDefault(); submitForm(); }
   if (f.dataset.act === 'person-submit') { e.preventDefault(); savePersonForm(f); }
+  if (f.dataset.act === 'add-step') { e.preventDefault(); addStep(f.dataset.id, new FormData(f).get('krok')); }
 });
 
 async function refreshListStatus() {

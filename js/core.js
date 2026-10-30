@@ -25,9 +25,9 @@ export const TARGETS = {
 };
 
 export const PRIORITY = {
-  snek: { label: 'Šnek', hint: 'počká', n: 1 },
-  zajic: { label: 'Zajíc', hint: 'brzy', n: 2 },
-  gepard: { label: 'Gepard', hint: 'hoří', n: 3 },
+  snek: { label: 'Šnek', hint: 'do konce měsíce', n: 1 },
+  zajic: { label: 'Zajíc', hint: 'do konce týdne', n: 2 },
+  gepard: { label: 'Gepard', hint: 'do zítra', n: 3 },
 };
 export const PRIORITY_ORDER = ['snek', 'zajic', 'gepard'];
 
@@ -117,8 +117,8 @@ export function plural(n, one, few, many) {
 
 /* ---------- prázdniny a volna z harmonogramu ---------- */
 
-export function holidaySet(events) {
-  const set = new Set();
+export function holidaySet(events, extraDates = []) {
+  const set = new Set(extraDates);
   for (const e of events || []) {
     if (e.typ !== 'prazdniny' && e.typ !== 'volno') continue;
     let d = parseYmd(e.od);
@@ -289,6 +289,9 @@ export function reconcile(want, existing, onlyTaskIds = null) {
     const patch = {};
     for (const f of ['nazev', 'popis', 'priorita', 'termin', 'cas', 'zobrazitOd', 'typ']) if (ex[f] !== a[f]) patch[f] = a[f];
     if ((ex.stitky || []).join('|') !== a.stitky.join('|')) patch.stitky = a.stitky;
+    // kroky ze zadání: nové se doplní, odebrané zmizí, odškrtnuté zůstanou odškrtnuté, vlastní kroky člověka zůstanou
+    const merged = mergeChecklist(a.kontrolni.map((k) => k.t), ex.kontrolni || []);
+    if (JSON.stringify(merged) !== JSON.stringify(ex.kontrolni || [])) patch.kontrolni = merged;
     if (Object.keys(patch).length) update.push({ id: ex.id, patch });
   }
   if (onlyTaskIds) {
@@ -298,6 +301,38 @@ export function reconcile(want, existing, onlyTaskIds = null) {
     }
   }
   return { create, update, remove };
+}
+
+/** Kroky ze zadání + stav odškrtnutí z přiřazení + vlastní kroky, které si člověk přidal sám. */
+export function mergeChecklist(template, current) {
+  const used = new Set();
+  const out = template.map((t) => {
+    const i = current.findIndex((c, j) => !used.has(j) && !c.own && c.t === t);
+    if (i >= 0) used.add(i);
+    return { t, done: i >= 0 ? !!current[i].done : false };
+  });
+  return [...out, ...current.filter((c) => c.own)];
+}
+
+/* ---------- navržený termín podle rychlosti ---------- */
+/**
+ * Gepard = do zítra (pracovní den), Zajíc = do konce týdne (pátek),
+ * Šnek = do konce měsíce (poslední pracovní den). Volna a svátky se přeskakují.
+ */
+export function suggestDue(priorita, now = new Date(), hol = new Set()) {
+  const today = startOfDay(now);
+  const back = (d) => { let x = d; let g = 0; while (isOff(x, hol) && g++ < 40) x = addDays(x, -1); return x; };
+  const fwd = (d) => { let x = d; let g = 0; while (isOff(x, hol) && g++ < 40) x = addDays(x, 1); return x; };
+  if (priorita === 'gepard') return fwd(addDays(today, 1));
+  if (priorita === 'zajic') {
+    let fri = addDays(startOfWeek(today), 4);
+    if (fri <= today) fri = addDays(fri, 7);
+    const d = back(fri);
+    return d <= today ? fwd(addDays(today, 1)) : d;
+  }
+  let end = back(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+  if (diffDays(end, today) < 3) end = back(new Date(today.getFullYear(), today.getMonth() + 2, 0));
+  return end;
 }
 
 /* ---------- třídění a seskupení pro „Moje“ ---------- */
