@@ -251,7 +251,13 @@ details.more { border-top: 1px solid var(--line); border-bottom: 1px solid var(-
 details.more summary { cursor: pointer; padding: 10px 0; font-weight: 700; color: var(--accent-text); list-style: none; }
 details.more summary::before { content: "+ "; font-family: var(--mono); }
 details.more[open] summary::before { content: "– "; }
-.form-foot { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0 calc(6px + env(safe-area-inset-bottom)); }
+/* tlačítko Uložit dole: pevný neprůhledný pruh až ke spodnímu okraji okna, nic pod ním neprosvítá */
+.form-foot {
+  position: sticky; bottom: 0; z-index: 3; background: var(--surface);
+  margin: 0 -28px; padding: 12px 28px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); box-shadow: 0 -10px 18px -12px rgba(20, 23, 31, .25);
+}
+dialog.sheet.form .sheet-in { padding-bottom: 0; }
 
 /* ---------- okna (dialogy) ----------
    mobil: Nový úkol, Upravit a Práce na úkolu přes celou obrazovku, potvrzení jako lišta zespodu
@@ -289,7 +295,8 @@ dialog[open].sheet { animation: up .22s ease-out; }
   }
   dialog.sheet.form { width: min(680px, 94vw); }
   dialog[open].sheet { animation: fromright .22s ease-out; }
-  dialog.sheet.confirm { margin: auto; height: auto; width: min(460px, 92vw); border-radius: 10px; animation: none; }
+  dialog.sheet.confirm { margin: auto; height: fit-content; max-height: 90dvh; width: min(480px, 92vw); border-radius: 10px; animation: none; }
+  dialog.sheet.confirm .sheet-in { height: auto; }
   .sheet-in { padding: 0 28px 28px; }
   .sheet-in::before { display: none; }
   .sh-head { position: sticky; top: 0; z-index: 3; background: var(--surface); padding-top: 18px; }
@@ -611,3 +618,13 @@ a.lnk:hover b { color: var(--accent-text); text-decoration: underline; }
 
 .toasts.in-dialog { left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom)); }
 @media (min-width: 700px) { .toasts.in-dialog { left: auto; right: 0; width: min(580px, 94vw); } }
+
+@media (max-width: 699px) {
+  .form-foot { margin: 0 calc(-1 * max(16px, env(safe-area-inset-left))) 0 calc(-1 * max(16px, env(safe-area-inset-right)));
+    padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  dialog.sheet.form .sheet-in { padding-bottom: 0; }
+}
+.upbar { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--accent-line); border-radius: 6px; background: var(--accent-soft); font-size: .9rem; }
+.upbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upbar b { font-family: var(--mono); font-size: .8rem; }
+.upbar .bar { grid-column: 1 / -1; margin: 0; }

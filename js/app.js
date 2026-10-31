@@ -4,7 +4,7 @@ import { parseCsv, tasksFromCsv, eventsFromCsv, toCsv } from './csv.js';
 import * as D from './dny.js';
 
 const cfg = window.UKOLNICEK_CONFIG || { mode: 'demo' };
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const $app = document.getElementById('app');
 
 const S = {
@@ -600,7 +600,7 @@ function viewNastaveni() {
     </section>
     <section class="panel">
       <h3 class="eyebrow">Vzhled</h3>
-      <div class="seg">${[['auto', 'Podle telefonu'], ['light', 'Světlý'], ['dark', 'Tmavý']].map(([v, l]) => `<button class="${theme === v ? 'on' : ''}" data-act="theme" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="seg">${[['auto', 'Podle zařízení'], ['light', 'Světlý'], ['dark', 'Tmavý']].map(([v, l]) => `<button class="${theme === v ? 'on' : ''}" data-act="theme" data-v="${v}">${l}</button>`).join('')}</div>
     </section>
     ${!standalone ? `<section class="panel">
       <h3 class="eyebrow">Mít po ruce</h3>
@@ -741,8 +741,8 @@ Nic si nedomýšlej. Kde termín v zápisu chybí, úkol vynech a vypiš ho zvl�
 
 /* ---------- listy (dialogy) ---------- */
 
-function sheet(html, cls = '') {
-  closeSheet();
+function sheet(html, cls = '', { keep = false } = {}) {
+  if (!keep) closeSheet();
   const d = document.createElement('dialog');
   d.className = `sheet ${cls}`;
   d.innerHTML = `<div class="sheet-in">${html}</div>`;
@@ -753,10 +753,10 @@ function sheet(html, cls = '') {
   return d;
 }
 /** Potvrzení přímo v appce (systémové okno confirm() na některých místech nefunguje). */
-function askConfirm(title, text, okLabel) {
+function askConfirm(title, text, okLabel, { danger = true, keep = false } = {}) {
   return new Promise((resolve) => {
     const d = sheet(`${sheetHead(title)}<p>${h(text)}</p>
-      <div class="row-actions"><button class="btn primary danger-fill" data-ok>${h(okLabel)}</button><button class="btn ghost" data-no>Zrušit</button></div>`, 'confirm');
+      <div class="row-actions"><button class="btn primary ${danger ? 'danger-fill' : ''}" data-ok>${h(okLabel)}</button><button class="btn ghost" data-no>Zrušit</button></div>`, 'confirm', { keep });
     let done = false;
     const fin = (v) => { if (done) return; done = true; resolve(v); d.close(); };
     d.querySelector('[data-ok]').onclick = (e) => { e.stopPropagation(); fin(true); };
@@ -840,7 +840,7 @@ function detailHtml(a) {
       <div class="d-h"><span class="eyebrow">Dokumenty a odkazy</span></div>
       ${links.length ? `<ul class="links">${links.map((l, i) => `<li>
         ${l.u ? `<a class="lnk" href="${h(l.u)}" target="_blank" rel="noopener">${icon(l.d || /sharepoint|onedrive|1drv/.test(l.u) ? 'file' : 'link')}<span><b>${h(l.n || l.u)}</b><small>${h(linkHost(l))}${others2.length ? (l.sdileno ? ' – nasdíleno' : ' – zatím jen pro tebe') : ''}</small></span></a>`
-          : `<span class="lnk">${icon('file')}<span><b>${h(l.n)}</b><small>V ukázce bez odkazu – v ostrém provozu se tu otevře soubor z OneDrive${others2.length && l.sdileno ? ' – nasdíleno' : ''}</small></span></span>`}
+          : `<span class="lnk">${icon('file')}<span><b>${h(l.n)}</b><small>V ukázce bez odkazu – v ostrém provozu se tu otevře soubor z OneDrive${l.nahrano ? ' (nahraný do složky Úkolníček)' : ''}${others2.length && l.sdileno ? ' – nasdíleno' : ''}</small></span></span>`}
         ${l.own || canEdit ? `<button class="iconbtn sm" data-act="rm-link" data-id="${a.id}" data-i="${i}" aria-label="Odebrat ${h(l.n || 'odkaz')}">${icon('close')}</button>` : ''}
       </li>`).join('')}</ul>` : ''}
       ${others2.length && unshared.length ? `<div class="sharewarn" role="note">
@@ -851,8 +851,9 @@ function detailHtml(a) {
           <button class="btn small ghost" data-act="share-help">Jak sdílet ručně</button>
         </div>
       </div>` : ''}
+      ${S.uploading?.id === a.id ? `<div class="upbar" role="status"><span>Nahrávám do OneDrivu: ${h(S.uploading.name)}</span><b>${S.uploading.pct} %</b><div class="bar thin"><i style="width:${S.uploading.pct}%"></i></div></div>` : ''}
       <div class="drop" data-drop="${a.id}">
-        <p class="small drop-pc">Přetáhni sem soubor ze složky <b>OneDrive</b> v Průzkumníku, nebo vlož odkaz.</p>
+        <p class="small drop-pc">Přetáhni sem soubor z počítače, nebo vlož odkaz. Soubor, který nemáš v OneDrivu (třeba ze Stažených), nahraju do tvého OneDrivu do složky Úkolníček.</p>
         <p class="small drop-touch">Vlož odkaz. V aplikaci OneDrive: u souboru <b>⋯ → Sdílet → Kopírovat odkaz</b>.</p>
         <form class="addlink" data-act="add-link" data-id="${a.id}">
           <input type="url" name="url" placeholder="Vlož odkaz na dokument…" aria-label="Odkaz na dokument" autocomplete="off">
@@ -1358,25 +1359,53 @@ async function addLinkFromInput(id, url) {
   await addLinks(id, [link]);
 }
 
+const BIG_FILE = 100 * 1024 * 1024; // nad 100 MB se appka zeptá
+const fmtMB = (b) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`);
+
+function setUpload(id, name, pct) {
+  S.uploading = name ? { id, name, pct } : null;
+  const bar = document.querySelector('dialog.detail .upbar');
+  if (bar && name) { bar.querySelector('i').style.width = `${pct}%`; bar.querySelector('b').textContent = `${pct} %`; return; }
+  if (document.querySelector('dialog.detail')) openDetail(id);
+}
+
+/**
+ * Soubor přetažený z počítače: když už je v OneDrivu, uloží se odkaz na něj.
+ * Když tam není (Stažené soubory, cizí počítač), nahraje se do OneDrivu do složky Úkolníček.
+ */
 async function addDropped(id, dt) {
   const files = [...(dt.files || [])];
   const uris = (dt.getData('text/uri-list') || '').split('\n').map((x) => x.trim()).filter((x) => x && !x.startsWith('#'));
   const out = [];
-  const missing = [];
-  if (files.length) {
-    busy(1);
+  const failed = [];
+  for (const f of files) {
     try {
-      for (const f of files) {
-        if (S.store.findDriveFile) {
-          const hit = await S.store.findDriveFile(f).catch(() => null);
-          if (hit) out.push(hit); else missing.push(f.name);
-        } else out.push({ u: '', n: f.name });
+      let hit = S.store.findDriveFile ? await S.store.findDriveFile(f).catch(() => null) : null;
+      if (hit) { out.push(hit); continue; }
+      if (f.size > BIG_FILE) {
+        const ok = await askConfirm(`Nahrát velký soubor?`,
+          `„${f.name}“ má ${fmtMB(f.size)}. Ve tvém OneDrivu ho nemám, takže ho nahraju do složky Úkolníček. Zabere tam ${fmtMB(f.size)} místa a nahrávání chvíli potrvá.`,
+          'Nahrát', { danger: false, keep: true });
+        if (!ok) continue;
       }
-    } finally { busy(-1); }
+      if (S.store.uploadFile) {
+        setUpload(id, f.name, 0);
+        hit = await S.store.uploadFile(f, (pct) => setUpload(id, f.name, pct));
+        setUpload(id, null);
+        out.push(hit);
+      } else {
+        out.push({ u: '', n: f.name, nahrano: true }); // ukázka: nic se doopravdy nenahrává
+      }
+    } catch (e) {
+      console.error(e);
+      setUpload(id, null);
+      failed.push(f.name);
+    }
   }
   for (const u of uris) out.push({ u, n: guessName(u) });
-  if (missing.length) toast(`V tvém OneDrivu jsem nenašel: ${missing.join(', ')}. Je soubor ve složce OneDrive a synchronizovaný? Můžeš vložit odkaz.`, { tone: 'warn' });
+  if (failed.length) toast(`Nepovedlo se nahrát: ${failed.join(', ')}. Zkus to znovu, nebo vlož odkaz.`, { tone: 'warn' });
   if (out.length) await addLinks(id, out);
+  if (out.some((l) => l.nahrano)) toast(S.store.uploadFile ? 'Soubor jsem nahrál do tvého OneDrivu do složky Úkolníček.' : 'V ukázce se nic nenahrává. V ostrém provozu se soubor uloží do tvého OneDrivu do složky Úkolníček.');
 }
 
 async function removeLink(id, i) {
@@ -1608,7 +1637,7 @@ document.addEventListener('click', async (e) => {
     case 'reload': return location.reload();
     case 'dismiss-error': S.error = ''; return render();
     case 'new': return openForm(null);
-    case 'close': return closeSheet();
+    case 'close': { const dl = el.closest('dialog'); if (dl) dl.close(); else closeSheet(); return; }
     case 'check': return toggleCheck(id, +el.dataset.i);
     case 'rm-step': return removeStep(id, +el.dataset.i);
     case 'shift': return shiftTask(id, v, document.querySelector('dialog.detail')?.dataset.id);

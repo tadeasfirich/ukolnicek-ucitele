@@ -323,8 +323,38 @@ export async function createSpStore(cfg) {
       const q = encodeURIComponent(file.name.replace(/'/g, "''"));
       const res = await graph('GET', `/me/drive/root/search(q='${q}')?$select=id,name,size,webUrl,parentReference,file&$top=50`);
       const same = (res.value || []).filter((x) => x.file && x.name.toLowerCase() === file.name.toLowerCase());
-      const hit = same.find((x) => x.size === file.size) || same[0];
+      // stejný název i velikost = ten samý soubor; jinak je to jiná verze a nahraje se
+      const hit = same.find((x) => x.size === file.size);
       return hit ? { u: hit.webUrl, n: hit.name, d: hit.parentReference?.driveId, i: hit.id } : null;
+    },
+    /** Nahraje soubor do OneDrivu přihlášeného do složky „Úkolníček“ (stejný název = nový soubor, nic se nepřepíše). */
+    async uploadFile(file, onProgress) {
+      const path = `/me/drive/root:/${encodeURIComponent(cfg.uploadFolder || 'Úkolníček')}/${encodeURIComponent(file.name)}`;
+      let item;
+      if (file.size <= 4 * 1024 * 1024) {
+        const r = await fetch(`${GRAPH}${path}:/content?@microsoft.graph.conflictBehavior=rename`, {
+          method: 'PUT', headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+        });
+        if (!r.ok) throw new Error(`Nahrání se nepovedlo (${r.status}).`);
+        item = await r.json();
+        onProgress?.(100);
+      } else {
+        const sess = await graph('POST', `${path}:/createUploadSession`, { item: { '@microsoft.graph.conflictBehavior': 'rename' } });
+        const CHUNK = 320 * 1024 * 32; // 10 MiB, násobek 320 KiB
+        for (let start = 0; start < file.size; start += CHUNK) {
+          const end = Math.min(start + CHUNK, file.size);
+          let r; let tries = 0;
+          do {
+            r = await fetch(sess.uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes ${start}-${end - 1}/${file.size}` }, body: file.slice(start, end) }).catch(() => null);
+            if (r && (r.ok || r.status === 202)) break;
+            await new Promise((ok) => setTimeout(ok, 1500 * ++tries));
+          } while (tries < 4);
+          if (!r || !(r.ok || r.status === 202)) throw new Error('Nahrání se přerušilo.');
+          onProgress?.(Math.round((end / file.size) * 100));
+          if (r.status === 200 || r.status === 201) item = await r.json();
+        }
+      }
+      return { u: item.webUrl, n: item.name, d: item.parentReference?.driveId, i: item.id, nahrano: true };
     },
     /** Nasdílí soubory lidem z úkolu (bez e-mailové pozvánky, jen pro přihlášené ze školy). */
     async shareLinks(links, emails, role = 'read') {

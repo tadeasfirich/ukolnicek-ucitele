@@ -164,7 +164,7 @@ Plošný úkol „Všichni pedagogové“ provoz nedostane. Provozu ho dáš zvl
 
 ## Dokumenty z OneDrivu
 
-- **Na počítači:** soubor ze složky OneDrive v Průzkumníku přetáhni do pole *Dokumenty a odkazy*. Prohlížeč appce neprozradí, kde soubor leží – appka ho proto dohledá ve tvém OneDrivu podle názvu a velikosti a uloží odkaz, který se otevře v Office na webu. Soubor musí být synchronizovaný (zelená fajfka nebo mráček).
+- **Na počítači:** soubor přetáhni do pole *Dokumenty a odkazy*. Prohlížeč appce neprozradí, kde soubor leží – appka ho proto nejdřív hledá ve tvém OneDrivu podle názvu a velikosti. Když ho najde, uloží odkaz, který se otevře v Office na webu. Když ho tam nenajde (soubor ze *Stažených*, z cizího počítače, nebo je to jiná verze), **nahraje ho do tvého OneDrivu do složky Úkolníček** a uloží odkaz na něj. Nic se nepřepisuje – soubor se stejným názvem dostane číslo. U souborů nad 100 MB se appka nejdřív zeptá, protože zaberou víc místa.
 - **Na mobilu a tabletu:** v aplikaci OneDrive u souboru *⋯ → Sdílet → Kopírovat odkaz* a odkaz vlož.
 - **Sdílení:** dokument z tvého OneDrivu vidíš jen ty. U úkolu s dalšími lidmi appka ukáže upozornění a tlačítko **Sdílet s nimi** – nasdílí soubor všem z úkolu (u společného úkolu s úpravami, jinak jen ke čtení), bez otravných e-mailů. Pod tlačítkem *Jak sdílet ručně* je návod pro Průzkumník i mobil.
 - Odkaz přidaný zadavatelem dostanou všichni, kdo úkol mají. Odkaz přidaný někým jiným je jen jeho (u společného úkolu všech řešitelů).
